@@ -35,7 +35,7 @@ class EasyPayService
             throw new InvalidArgumentException('签名校验失败');
         }
 
-        $this->validateSubmitParams($params);
+        $this->validateSubmitParams($params, $client);
         OpenApiClient::updateLastUsed((int)$client['id'], $request->getRealIp(false));
 
         $existing = EasyPayOrder::findByClientAndOutTradeNo((int)$client['id'], (string)$params['out_trade_no']);
@@ -53,7 +53,7 @@ class EasyPayService
             'deposit_order_no' => '',
             'name' => (string)($params['name'] ?? ''),
             'money' => (string)$params['money'],
-            'notify_url' => (string)$params['notify_url'],
+            'notify_url' => $this->effectiveNotifyUrlForSubmit($params, $client),
             'return_url' => (string)($params['return_url'] ?? ''),
             'request_params' => json_encode($storedParams, JSON_UNESCAPED_UNICODE),
             'status' => 'pending',
@@ -160,7 +160,7 @@ class EasyPayService
             }
             return ['skipped' => true, 'reason' => 'api_disabled'];
         }
-        $notifyUrl = trim((string)($epayOrder['notify_url'] ?? ''));
+        $notifyUrl = $this->effectiveNotifyUrlForNotify($epayOrder, $client);
         if ($notifyUrl === '') {
             if ($manual) {
                 throw new InvalidArgumentException('易支付订单未设置异步回调地址');
@@ -299,23 +299,45 @@ class EasyPayService
         return $this->clientSecret($client);
     }
 
-    private function validateSubmitParams(array $params): void
+    private function validateSubmitParams(array $params, array $client): void
     {
-        foreach (['out_trade_no', 'notify_url', 'name', 'money'] as $field) {
+        foreach (['out_trade_no', 'name', 'money'] as $field) {
             if (trim((string)($params[$field] ?? '')) === '') {
                 throw new InvalidArgumentException('缺少易支付参数：' . $field);
             }
         }
+        if ($this->clientCallbackUrl($client) === '' && trim((string)($params['notify_url'] ?? '')) === '') {
+            throw new InvalidArgumentException('缺少易支付参数：notify_url');
+        }
         if (!$this->validMoney((string)$params['money'])) {
             throw new InvalidArgumentException('易支付金额格式不正确');
         }
-        $this->validateUrl((string)$params['notify_url'], '异步回调地址');
+        if ($this->clientCallbackUrl($client) === '') {
+            $this->validateUrl((string)$params['notify_url'], '异步回调地址');
+        }
         if (trim((string)($params['return_url'] ?? '')) !== '') {
             $this->validateUrl((string)$params['return_url'], '同步跳转地址');
         }
         if (strlen((string)$params['out_trade_no']) > 128) {
             throw new InvalidArgumentException('商户订单号过长');
         }
+    }
+
+    private function effectiveNotifyUrlForSubmit(array $params, array $client): string
+    {
+        $callbackUrl = $this->clientCallbackUrl($client);
+        return $callbackUrl !== '' ? $callbackUrl : trim((string)($params['notify_url'] ?? ''));
+    }
+
+    private function effectiveNotifyUrlForNotify(array $epayOrder, array $client): string
+    {
+        $callbackUrl = $this->clientCallbackUrl($client);
+        return $callbackUrl !== '' ? $callbackUrl : trim((string)($epayOrder['notify_url'] ?? ''));
+    }
+
+    private function clientCallbackUrl(array $client): string
+    {
+        return trim((string)($client['callback_url'] ?? ''));
     }
 
     private function validMoney(string $money): bool
