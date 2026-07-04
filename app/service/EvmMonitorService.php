@@ -41,7 +41,7 @@ class EvmMonitorService
 
         RpcNetworkSetting::markMonitorAt($networkCode);
         $latest = $rpc->getBlockNumber($networkCode);
-        $confirmed = $this->updateConfirmingOrders($networkCode, $latest, (int)$cfg['confirm_blocks']);
+        $confirmed = $this->updateConfirmingOrders($networkCode, $latest);
         $activeMonitorCount = PaymentAddress::activeMonitorCount($networkCode);
         if ($activeMonitorCount <= 0) {
             return ['network' => $networkCode, 'skipped' => '当前网络没有待监听地址', 'expired_frozen' => 0, 'confirmed' => $confirmed];
@@ -141,7 +141,7 @@ class EvmMonitorService
             $logs = $rpc->getLogs($networkCode, $filter);
             $logsCount += count($logs);
             foreach ($logs as $log) {
-                $matched += $this->handleLog($rpc, $networkCode, $tokenCode, $log, $latest, (int)$cfg['confirm_blocks']) ? 1 : 0;
+                $matched += $this->handleLog($rpc, $networkCode, $tokenCode, $log, $latest) ? 1 : 0;
             }
         }
         MonitorCursor::updateBlock((int)$cursor['id'], $to);
@@ -176,13 +176,13 @@ class EvmMonitorService
         return $expired;
     }
 
-    private function updateConfirmingOrders(string $networkCode, int $latestBlock, int $requiredConfirmations): int
+    private function updateConfirmingOrders(string $networkCode, int $latestBlock): int
     {
         $confirmed = 0;
         foreach (DepositOrder::confirmingList($networkCode, 200) as $order) {
             $required = (int)($order['required_confirmations'] ?? 0);
             if ($required <= 0) {
-                $required = $requiredConfirmations;
+                continue;
             }
             $current = $this->currentConfirmations($latestBlock, (int)$order['tx_block_number'], $required);
             if ($current < $required) {
@@ -198,7 +198,7 @@ class EvmMonitorService
         return $confirmed;
     }
 
-    private function handleLog(EvmRpcService $rpc, string $networkCode, string $tokenCode, array $log, int $latestBlock, int $requiredConfirmations): bool
+    private function handleLog(EvmRpcService $rpc, string $networkCode, string $tokenCode, array $log, int $latestBlock): bool
     {
         $decoded = (new EvmLogDecoderService())->decodeTransfer($log);
         if (!$decoded || DepositOrder::existsLog($networkCode, $decoded['tx_hash'], (int)$decoded['log_index'])) {
@@ -221,6 +221,10 @@ class EvmMonitorService
             return false;
         }
 
+        $requiredConfirmations = (int)($order['required_confirmations'] ?? 0);
+        if ($requiredConfirmations <= 0) {
+            return false;
+        }
         $currentConfirmations = $this->currentConfirmations($latestBlock, (int)$decoded['block_number'], $requiredConfirmations);
         $txData = [
             'paid_amount_int' => $decoded['amount_int'],
@@ -304,7 +308,8 @@ class EvmMonitorService
                 $address,
                 (string)$activeCollection['address_lower'],
                 (string)$confirmedOrder['paid_amount_int'],
-                ($activeCollection['address_type'] ?? '') === 'third_party' ? 'exchange' : 'local'
+                ($activeCollection['address_type'] ?? '') === 'third_party' ? 'exchange' : 'local',
+                (int)$confirmedOrder['required_confirmations']
             );
         }
         (new OpenApiService())->sendCallbackForOrder($confirmedOrder);

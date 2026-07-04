@@ -50,7 +50,9 @@ class DepositService
         $fiatCurrency = strtoupper(trim((string)($input['fiat_currency'] ?? '')));
         $fiatAmount = trim((string)($input['fiat_amount'] ?? ''));
         $quote = (new FiatRateService())->quote($tokenCode, $fiatCurrency, $fiatAmount);
-        (new EvmRpcService())->tokenConfig($networkCode, $tokenCode);
+        $rpc = new EvmRpcService();
+        $token = $rpc->tokenConfig($networkCode, $tokenCode);
+        $requiredConfirmations = $this->requiredConfirmationsForAmount($rpc, $networkCode, (string)$quote['amount_int'], (int)($token['decimals'] ?? 6));
         (new EvmMonitorService())->prepareCursorForOrder($networkCode, $tokenCode);
         if ($quote['amount_int'] === '0') {
             throw new InvalidArgumentException('交易金额必须大于 0');
@@ -90,6 +92,8 @@ class DepositService
             'address_id' => $address['id'],
             'address' => strtolower($address['address_lower']),
             'to_address' => strtolower($address['address_lower']),
+            'required_confirmations' => $requiredConfirmations,
+            'current_confirmations' => 0,
             'status' => 'waiting',
             'expire_at' => $expireAt,
         ];
@@ -99,6 +103,18 @@ class DepositService
         }
 
         return $this->orderPayload(DepositOrder::findByOrderNo($orderNo) ?: $record, $timeoutMinutes, $baseUrl);
+    }
+
+    private function requiredConfirmationsForAmount(EvmRpcService $rpc, string $networkCode, string $amountInt, int $decimals): int
+    {
+        $cfg = $rpc->runtimeConfig($networkCode);
+        $minConfirmBlocks = max(1, (int)($cfg['min_confirm_blocks'] ?? ($cfg['confirm_blocks'] ?? 12)));
+        $maxConfirmBlocks = max($minConfirmBlocks, (int)($cfg['confirm_blocks'] ?? $minConfirmBlocks));
+        $thresholdInt = (new TokenAmountService())->toInt((string)($cfg['large_amount_threshold'] ?? '100'), $decimals);
+
+        return (new TokenAmountService())->compare($amountInt, $thresholdInt) <= 0
+            ? $minConfirmBlocks
+            : $maxConfirmBlocks;
     }
 
     public function detail(string $orderNo): array

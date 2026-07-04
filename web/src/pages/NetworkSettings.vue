@@ -48,15 +48,10 @@
         <n-form-item label="USDT 合约地址">
           <n-input v-model:value="form.usdt_contract_address" placeholder="请输入当前网络 USDT 合约地址" />
         </n-form-item>
-        <n-grid cols="1 m:3" responsive="screen" :x-gap="12">
+        <n-grid cols="1 m:2" responsive="screen" :x-gap="12">
           <n-gi>
             <n-form-item label="监听间隔（秒）">
               <n-input-number v-model:value="form.monitor_interval_seconds" :min="2" :max="3600" />
-            </n-form-item>
-          </n-gi>
-          <n-gi>
-            <n-form-item label="确认区块数">
-              <n-input-number v-model:value="form.confirm_blocks" :min="1" :max="10000" />
             </n-form-item>
           </n-gi>
           <n-gi>
@@ -65,6 +60,21 @@
             </n-form-item>
           </n-gi>
         </n-grid>
+        <n-grid cols="1 m:2" responsive="screen" :x-gap="12">
+          <n-gi>
+            <n-form-item label="最小确认区块数">
+              <n-input-number v-model:value="form.min_confirm_blocks" :min="1" :max="10000" />
+            </n-form-item>
+          </n-gi>
+          <n-gi>
+            <n-form-item label="最大确认区块数">
+              <n-input-number v-model:value="form.confirm_blocks" :min="1" :max="10000" />
+            </n-form-item>
+          </n-gi>
+        </n-grid>
+        <n-form-item label="大额阈值（USDC/USDT）">
+          <n-input v-model:value="form.large_amount_threshold" placeholder="超过该数量使用最大确认区块数" />
+        </n-form-item>
       </n-form>
       <template #action>
         <n-space justify="end">
@@ -109,7 +119,8 @@ const columns = [
   { title: '网络', key: 'network_code', width: 140, render: renderNetworkTag },
   { title: '自动监听', key: 'enabled', width: 120, render: (row: any) => h(NTag, { type: Number(row.enabled) ? 'success' : 'default', bordered: false }, { default: () => Number(row.enabled) ? '启用' : '停用' }) },
   { title: '监听间隔', key: 'monitor_interval_seconds', width: 110, render: (row: any) => `${row.monitor_interval_seconds} 秒` },
-  { title: '确认区块', key: 'confirm_blocks', width: 100 },
+  { title: '确认区块', key: 'confirm_range', width: 140, render: (row: any) => `${row.min_confirm_blocks || row.confirm_blocks} / ${row.confirm_blocks}` },
+  { title: '大额阈值', key: 'large_amount_threshold', width: 150, render: (row: any) => `${row.large_amount_threshold || '100'} USDC/USDT` },
   { title: '扫描步长', key: 'scan_step_blocks', width: 100 },
   { title: 'USDC 合约', key: 'contract_address', width: 130, render: (row: any) => renderShortText(row.contract_address) },
   { title: 'USDT 合约', key: 'usdt_contract_address', width: 130, render: (row: any) => renderShortText(row.usdt_contract_address) },
@@ -157,8 +168,10 @@ function edit(row: any) {
     contract_address: row.contract_address || row.usdc_contract_address || '',
     usdt_contract_address: row.usdt_contract_address || '',
     monitor_interval_seconds: Number(row.monitor_interval_seconds || 10),
+    min_confirm_blocks: Number(row.min_confirm_blocks || row.confirm_blocks || 12),
     confirm_blocks: Number(row.confirm_blocks || 12),
-    scan_step_blocks: Number(row.scan_step_blocks || 500)
+    scan_step_blocks: Number(row.scan_step_blocks || 500),
+    large_amount_threshold: String(row.large_amount_threshold || '100')
   })
   formShow.value = true
 }

@@ -147,16 +147,26 @@
             </n-form-item>
           </n-gi>
           <n-gi>
-            <n-form-item label="确认区块数">
-              <n-input-number v-model:value="networkForm.confirm_blocks" :min="1" :max="10000" />
-            </n-form-item>
-          </n-gi>
-          <n-gi>
             <n-form-item label="扫描步长">
               <n-input-number v-model:value="networkForm.scan_step_blocks" :min="1" :max="100000" />
             </n-form-item>
           </n-gi>
         </n-grid>
+        <n-grid cols="1 m:2" responsive="screen" :x-gap="12">
+          <n-gi>
+            <n-form-item label="最小确认区块数">
+              <n-input-number v-model:value="networkForm.min_confirm_blocks" :min="1" :max="10000" />
+            </n-form-item>
+          </n-gi>
+          <n-gi>
+            <n-form-item label="最大确认区块数">
+              <n-input-number v-model:value="networkForm.confirm_blocks" :min="1" :max="10000" />
+            </n-form-item>
+          </n-gi>
+        </n-grid>
+        <n-form-item label="大额阈值（USDC/USDT）">
+          <n-input v-model:value="networkForm.large_amount_threshold" placeholder="超过该数量使用最大确认区块数" />
+        </n-form-item>
       </n-form>
       <template #action>
         <n-space justify="end">
@@ -383,7 +393,8 @@ const networkColumns = [
   { title: '网络', key: 'network_code', width: 150, render: renderNetworkTag },
   { title: '自动监听', key: 'enabled', width: 150, render: renderNetworkMonitorSwitch },
   { title: '监听间隔', key: 'monitor_interval_seconds', width: 120, render: (row: any) => `${row.monitor_interval_seconds} 秒` },
-  { title: '确认区块', key: 'confirm_blocks', width: 110 },
+  { title: '确认区块', key: 'confirm_range', width: 140, render: (row: any) => `${row.min_confirm_blocks || row.confirm_blocks} / ${row.confirm_blocks}` },
+  { title: '大额阈值', key: 'large_amount_threshold', width: 150, render: (row: any) => `${row.large_amount_threshold || '100'} USDC/USDT` },
   { title: '扫描步长', key: 'scan_step_blocks', width: 110 },
   { title: 'USDC 合约', key: 'contract_address', width: 300, ellipsis: { tooltip: true } },
   { title: 'USDT 合约', key: 'usdt_contract_address', width: 300, ellipsis: { tooltip: true } },
@@ -494,8 +505,10 @@ function openNetworkSetting(row: any) {
     contract_address: row.contract_address || '',
     usdt_contract_address: row.usdt_contract_address || '',
     monitor_interval_seconds: Number(row.monitor_interval_seconds || 10),
+    min_confirm_blocks: Number(row.min_confirm_blocks || row.confirm_blocks || 12),
     confirm_blocks: Number(row.confirm_blocks || 12),
     scan_step_blocks: Number(row.scan_step_blocks || 500),
+    large_amount_threshold: String(row.large_amount_threshold || '100'),
     enabled: !!row.enabled
   })
   networkSettingShow.value = true
@@ -623,8 +636,10 @@ function networkPayload(row: any, enabled = !!row.enabled) {
     contract_address: row.contract_address || '',
     usdt_contract_address: row.usdt_contract_address || '',
     monitor_interval_seconds: Number(row.monitor_interval_seconds || 10),
+    min_confirm_blocks: Number(row.min_confirm_blocks || row.confirm_blocks || 12),
     confirm_blocks: Number(row.confirm_blocks || 12),
     scan_step_blocks: Number(row.scan_step_blocks || 500),
+    large_amount_threshold: String(row.large_amount_threshold || '100'),
     enabled
   }
 }

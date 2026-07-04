@@ -76,7 +76,7 @@ class CollectionTask extends BaseModel
         return $row ? $row->toArray() : null;
     }
 
-    public static function createPending(array $address, string $toAddress, string $amountInt, string $collectionType = 'local'): array
+    public static function createPending(array $address, string $toAddress, string $amountInt, string $collectionType = 'local', int $requiredConfirmations = 0): array
     {
         $exists = self::findByAddressId((int)$address['id']);
         if ($exists && !in_array($exists['status'], ['collect_failed', 'manual_required'], true)) {
@@ -91,6 +91,8 @@ class CollectionTask extends BaseModel
             'to_address' => strtolower($toAddress),
             'collection_type' => $collectionType,
             'amount_int' => $amountInt,
+            'required_confirmations' => $requiredConfirmations,
+            'current_confirmations' => 0,
             'status' => 'pending_collect',
         ]);
     }

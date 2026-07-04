@@ -15,6 +15,7 @@ class RpcConfigService
 {
     public function list(): array
     {
+        (new RpcNetworkSettingSchemaService())->ensure();
         $this->ensureDefaults();
         $proxyNames = $this->proxyNames();
         $groups = RpcGroup::allList();
@@ -36,10 +37,14 @@ class RpcConfigService
         $settings = [];
         foreach (RpcNetworkSetting::allList() as $setting) {
             $activeGroupId = (int)($setting['active_group_id'] ?? 0);
+            $defaults = config('chains.networks.' . $setting['network_code']) ?: [];
             $setting['network_name'] = $this->networkName((string)$setting['network_code']);
             $setting['contract_address'] = $this->networkTokenContract((string)$setting['network_code'], 'USDC') ?: (string)($setting['contract_address'] ?? '');
             $setting['usdc_contract_address'] = $setting['contract_address'];
             $setting['usdt_contract_address'] = $this->networkTokenContract((string)$setting['network_code'], 'USDT');
+            $setting['min_confirm_blocks'] = (int)($setting['min_confirm_blocks'] ?? ($defaults['min_confirm_blocks'] ?? ($setting['confirm_blocks'] ?? ($defaults['confirm_blocks'] ?? 12))));
+            $setting['confirm_blocks'] = (int)($setting['confirm_blocks'] ?? ($defaults['confirm_blocks'] ?? 12));
+            $setting['large_amount_threshold'] = (string)($setting['large_amount_threshold'] ?? ($defaults['large_amount_threshold'] ?? '100'));
             $setting['active_group_name'] = $activeGroupId > 0 ? ($groupNames[$activeGroupId] ?? '分组不存在') : '未选择';
             $setting['enabled'] = (int)($setting['enabled'] ?? 0);
             $settings[] = $setting;
@@ -68,6 +73,7 @@ class RpcConfigService
 
     public function saveNetwork(array $input): array
     {
+        (new RpcNetworkSettingSchemaService())->ensure();
         $networkCode = $this->validNetwork((string)($input['network_code'] ?? ''));
         $exists = RpcNetworkSetting::findByNetwork($networkCode) ?: [];
         $defaults = config('chains.networks.' . $networkCode) ?: [];
@@ -89,11 +95,20 @@ class RpcConfigService
         $this->assertEvmAddress($usdcContract, 'USDC 合约地址');
         $this->assertEvmAddress($usdtContract, 'USDT 合约地址');
 
+        $minConfirmBlocks = max(1, (int)($input['min_confirm_blocks'] ?? ($exists['min_confirm_blocks'] ?? ($defaults['min_confirm_blocks'] ?? ($defaults['confirm_blocks'] ?? 12)))));
+        $maxConfirmBlocks = max(1, (int)($input['confirm_blocks'] ?? ($exists['confirm_blocks'] ?? ($defaults['confirm_blocks'] ?? 12))));
+        if ($minConfirmBlocks > $maxConfirmBlocks) {
+            throw new InvalidArgumentException('最小确认区块数不能大于最大确认区块数');
+        }
+        $largeAmountThreshold = $this->normalizeLargeAmountThreshold((string)($input['large_amount_threshold'] ?? ($exists['large_amount_threshold'] ?? ($defaults['large_amount_threshold'] ?? '100'))));
+
         $data = [
             'contract_address' => $usdcContract,
             'decimals' => $this->tokenDecimals('USDC'),
             'monitor_interval_seconds' => max(2, (int)($input['monitor_interval_seconds'] ?? ($exists['monitor_interval_seconds'] ?? ($defaults['monitor_interval_seconds'] ?? 10)))),
-            'confirm_blocks' => max(1, (int)($input['confirm_blocks'] ?? ($exists['confirm_blocks'] ?? ($defaults['confirm_blocks'] ?? 12)))),
+            'min_confirm_blocks' => $minConfirmBlocks,
+            'confirm_blocks' => $maxConfirmBlocks,
+            'large_amount_threshold' => $largeAmountThreshold,
             'scan_step_blocks' => max(1, (int)($input['scan_step_blocks'] ?? ($exists['scan_step_blocks'] ?? ($defaults['scan_step_blocks'] ?? 500)))),
             'active_group_id' => $activeGroupId,
             'enabled' => !empty($input['enabled']) ? 1 : 0,
@@ -270,6 +285,7 @@ class RpcConfigService
 
     public function ensureDefaults(): void
     {
+        (new RpcNetworkSettingSchemaService())->ensure();
         $this->ensureTokenDefaults();
         foreach (config('chains.networks') ?: [] as $networkCode => $cfg) {
             $setting = RpcNetworkSetting::findByNetwork((string)$networkCode);
@@ -309,7 +325,9 @@ class RpcConfigService
             'contract_address' => strtolower((string)($cfg['usdc_contract'] ?? '')),
             'decimals' => $this->tokenDecimals('USDC'),
             'monitor_interval_seconds' => (int)($cfg['monitor_interval_seconds'] ?? 10),
+            'min_confirm_blocks' => (int)($cfg['min_confirm_blocks'] ?? ($cfg['confirm_blocks'] ?? 12)),
             'confirm_blocks' => (int)($cfg['confirm_blocks'] ?? 12),
+            'large_amount_threshold' => (string)($cfg['large_amount_threshold'] ?? '100'),
             'scan_step_blocks' => (int)($cfg['scan_step_blocks'] ?? 500),
             'active_group_id' => 0,
             'enabled' => 0,
@@ -375,6 +393,21 @@ class RpcConfigService
     {
         $decimals = (int)(config('chains.tokens.' . strtoupper($tokenCode) . '.decimals') ?: 6);
         return $decimals > 0 ? $decimals : 6;
+    }
+
+    private function normalizeLargeAmountThreshold(string $threshold): string
+    {
+        $threshold = trim($threshold);
+        if ($threshold === '') {
+            throw new InvalidArgumentException('大额阈值不能为空');
+        }
+
+        $amountInt = (new TokenAmountService())->toInt($threshold, $this->tokenDecimals('USDC'));
+        if ((new TokenAmountService())->compare($amountInt, '0') <= 0) {
+            throw new InvalidArgumentException('大额阈值必须大于 0');
+        }
+
+        return (new TokenAmountService())->toDisplay($amountInt, $this->tokenDecimals('USDC'));
     }
 
     private function assertEvmAddress(string $address, string $label): void

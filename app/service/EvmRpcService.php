@@ -265,6 +265,7 @@ class EvmRpcService
 
     private function runtimeNetworkSetting(string $networkCode): array
     {
+        (new RpcNetworkSettingSchemaService())->ensure();
         $defaults = config('chains.networks.' . $networkCode) ?: [];
         if (!$defaults) {
             throw new RuntimeException('网络不存在：' . $networkCode);
@@ -276,7 +277,9 @@ class EvmRpcService
             'default_rpc_url' => $defaults['rpc_url'] ?? '',
             'contract_address' => $row['contract_address'] ?? ($defaults['usdc_contract'] ?? ''),
             'decimals' => (int)($row['decimals'] ?? ($defaults['decimals'] ?? 6)),
+            'min_confirm_blocks' => (int)($row['min_confirm_blocks'] ?? ($defaults['min_confirm_blocks'] ?? ($row['confirm_blocks'] ?? ($defaults['confirm_blocks'] ?? 12)))),
             'confirm_blocks' => (int)($row['confirm_blocks'] ?? ($defaults['confirm_blocks'] ?? 12)),
+            'large_amount_threshold' => (string)($row['large_amount_threshold'] ?? ($defaults['large_amount_threshold'] ?? '100')),
             'scan_step_blocks' => (int)($row['scan_step_blocks'] ?? ($defaults['scan_step_blocks'] ?? 500)),
             'monitor_interval_seconds' => (int)($row['monitor_interval_seconds'] ?? ($defaults['monitor_interval_seconds'] ?? 10)),
             'enabled' => (int)($row['enabled'] ?? 0),

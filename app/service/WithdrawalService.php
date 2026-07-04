@@ -180,6 +180,8 @@ class WithdrawalService
             throw new RuntimeException('当前网络已有未完成的转出任务，请等待完成后再创建新的转出任务');
         }
 
+
+        $requiredConfirmations = (int)((new EvmRpcService())->runtimeConfig((string)$preview['network_code'])['confirm_blocks'] ?? 0);
         return WithdrawalTask::createPending([
             'network_code' => $preview['network_code'],
             'token_code' => $preview['token_code'],
@@ -188,7 +190,7 @@ class WithdrawalService
             'to_address' => $preview['to_address'],
             'amount_int' => $preview['amount_int'],
             'max_retry_count' => $this->maxRetryCountForAccountToken((int)$preview['wallet_account_id'], (string)$preview['token_code']),
-            'required_confirmations' => 0,
+            'required_confirmations' => $requiredConfirmations,
             'current_confirmations' => 0,
             'error_message' => '',
         ]);

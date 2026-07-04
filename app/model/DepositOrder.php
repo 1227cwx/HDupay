@@ -61,6 +61,15 @@ class DepositOrder extends BaseModel
         return $row ? $row->toArray() : null;
     }
 
+    public static function findLatestByAddressId(int $addressId): ?array
+    {
+        $row = self::query()
+            ->where('address_id', $addressId)
+            ->orderByDesc('id')
+            ->first();
+        return $row ? $row->toArray() : null;
+    }
+
     public static function existsLog(string $networkCode, string $txHash, int $logIndex): bool
     {
         return self::query()

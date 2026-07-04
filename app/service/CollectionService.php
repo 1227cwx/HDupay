@@ -3,6 +3,7 @@
 namespace app\service;
 
 use app\model\CollectionTask;
+use app\model\DepositOrder;
 use app\model\GasFundingTransaction;
 use app\model\PaymentAddress;
 use app\model\RpcConfig;
@@ -73,8 +74,19 @@ class CollectionService
             $address,
             (string)$activeCollection['address_lower'],
             $amountInt ?: '0',
-            ($activeCollection['address_type'] ?? '') === 'third_party' ? 'exchange' : 'local'
+            ($activeCollection['address_type'] ?? '') === 'third_party' ? 'exchange' : 'local',
+            $this->requiredConfirmationsForAddress((int)$address['id'])
         );
+    }
+
+    private function requiredConfirmationsForAddress(int $addressId): int
+    {
+        $order = DepositOrder::findLatestByAddressId($addressId);
+        $requiredConfirmations = (int)($order['required_confirmations'] ?? 0);
+        if ($requiredConfirmations <= 0) {
+            throw new RuntimeException('来源订单缺少确认区块数，不能创建归集任务');
+        }
+        return $requiredConfirmations;
     }
 
     public function processPending(int $limit = 10): array
@@ -168,6 +180,10 @@ class CollectionService
             return ['task_id' => $task['id'], 'ok' => true, 'status' => 'collected', 'note' => '余额为 0，无需归集'];
         }
         $amount = $task['amount_int'] !== '0' && (new TokenAmountService())->compare($task['amount_int'], $balance) <= 0 ? $task['amount_int'] : $balance;
+        $requiredConfirmations = (int)($task['required_confirmations'] ?? 0);
+        if ($requiredConfirmations <= 0) {
+            throw new RuntimeException('归集任务缺少订单确认区块数');
+        }
         $data = (new TransactionSignerService())->erc20TransferData($targetAddress, $amount);
         $gasPrice = $rpc->gasPrice($networkCode);
         $gasLimit = $this->erc20TransferGasLimit();
@@ -198,7 +214,7 @@ class CollectionService
         CollectionTask::mark((int)$task['id'], 'collecting', [
             'collect_tx_hash' => strtolower($txHash),
             'amount_int' => $amount,
-            'required_confirmations' => (int)$cfg['confirm_blocks'],
+            'required_confirmations' => $requiredConfirmations,
             'current_confirmations' => 0,
             'error_message' => '',
         ]);
@@ -237,10 +253,9 @@ class CollectionService
             return ['task_id' => $task['id'], 'ok' => true, 'status' => 'collecting', 'note' => '等待交易回执'];
         }
         $hex = new EvmHexService();
-        $cfg = $rpc->runtimeConfig($task['network_code']);
         $requiredConfirmations = (int)($task['required_confirmations'] ?? 0);
         if ($requiredConfirmations <= 0) {
-            $requiredConfirmations = (int)$cfg['confirm_blocks'];
+            throw new RuntimeException('归集任务缺少订单确认区块数');
         }
         $blockNumber = $hex->quantityToInt((string)($receipt['blockNumber'] ?? '0x0'));
         $latest = $rpc->getBlockNumber($task['network_code']);
