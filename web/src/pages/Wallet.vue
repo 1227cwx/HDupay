@@ -574,7 +574,7 @@ async function load() {
 }
 
 function openCollectionRecords(networkCode: string) {
-  router.push({ path: '/cwxdqz/collections', query: { network_code: networkCode } })
+  router.push({ path: '/hdupay/collections', query: { network_code: networkCode } })
 }
 
 function collectionTypeText(type: string) {
@@ -917,7 +917,7 @@ async function createWithdraw() {
     clearBalanceCache(withdrawForm.network_code, 'collection')
     message.success('转出任务已创建')
     withdrawShow.value = false
-    await router.push('/cwxdqz/withdrawals')
+  await router.push('/hdupay/withdrawals')
   } catch (e: any) {
     message.error(e.message)
   } finally {

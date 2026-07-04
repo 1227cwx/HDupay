@@ -111,7 +111,7 @@ const drawerShow = ref(false)
 const expandedKeys = ref<string[]>([])
 const windowWidth = ref(typeof window === 'undefined' ? 1200 : window.innerWidth)
 const currentAdmin = ref<any>({})
-const adminPrefix = '/cwxdqz'
+const adminPrefix = '/hdupay'
 const adminPath = (path: string) => `${adminPrefix}${path}`
 
 function renderIcon(icon: any, color: string) {

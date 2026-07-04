@@ -11,3 +11,6 @@
 /web/.vite
 
 
+
+# Local database config
+/config/database.php

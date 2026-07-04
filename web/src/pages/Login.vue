@@ -38,7 +38,7 @@ async function login() {
   try {
     await api.post('/admin/auth/login', form)
     message.success('登录成功')
-    await router.push('/cwxdqz/overview')
+    await router.push('/hdupay/overview')
   } catch (e: any) {
     message.error(e.message)
   } finally {

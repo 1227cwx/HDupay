@@ -29,8 +29,8 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
     throw new Error('接口响应格式错误')
   }
   if (body.code === 401) {
-    if (location.pathname !== '/cwxdqz/login') {
-      location.href = '/cwxdqz/login'
+    if (location.pathname !== '/hdupay/login') {
+      location.href = '/hdupay/login'
     }
     throw new Error(body.msg || '请先登录后台')
   }

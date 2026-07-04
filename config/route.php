@@ -25,7 +25,7 @@ Route::disableDefaultRoute();
  */
 Route::get('/', [IndexController::class, 'index']);
 Route::get('/login', [IndexController::class, 'index']);
-Route::group('/cwxdqz', function () {
+Route::group('/hdupay', function () {
     Route::get('', [IndexController::class, 'index']);
     Route::get('/login', [IndexController::class, 'index']);
     Route::get('/overview', [IndexController::class, 'index']);

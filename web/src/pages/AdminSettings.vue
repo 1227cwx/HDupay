@@ -254,7 +254,7 @@ const sampleRateRows = computed(() => (rateTestResult.value?.sample_rates || [])
 async function loadCurrent() {
   const data: any = await api.get('/admin/auth/me')
   if (!data || !data.id) {
-    await router.push('/cwxdqz/login')
+  await router.push('/hdupay/login')
     return
   }
   current.value = data

@@ -18,7 +18,7 @@ import Login from './pages/Login.vue'
 import AdminProfile from './pages/AdminProfile.vue'
 import FiatRates from './pages/FiatRates.vue'
 
-const admin = '/cwxdqz'
+const admin = '/hdupay'
 
 export default createRouter({
   history: createWebHistory(),
