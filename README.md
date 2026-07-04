@@ -642,7 +642,7 @@ LICENSE
 
 ---
 
-## ?? Community
+## 🌐 Community
 
 This open-source project is linked with and recognizes the [LINUX DO](https://linux.do) community.
 
