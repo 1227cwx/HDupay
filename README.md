@@ -360,7 +360,20 @@ http://127.0.0.1:2828/pay
 
 ---
 
+### 🔐 默认管理员
+
+导入 `database/schema.sql` 后，会写入一个默认管理员账号：
+
+| 项目 | 内容 |
+|---|---|
+| 登录地址 | `/hdupay/login` |
+| 账号 | `admin` |
+| 密码 | `Admin@123456` |
+
+> ⚠️ 首次登录后请立即进入「系统设置」修改管理员账号和密码。
+
 ---
+
 ## 📡 RPC 与代理
 
 当前支持的 RPC 提供商：
@@ -423,6 +436,48 @@ GET/POST /submit.php
 
 ---
 
+## 🔗 New-Api 接入
+
+HDupay 提供 `/submit.php` 易支付兼容入口，可以接入 New-Api 的易支付支付渠道。接入前请先在 HDupay 后台「API 设置」中添加 API，获取 API Key 和 API Secret。
+
+### 1️⃣ 配置易支付通道
+
+在 New-Api 后台选择「易支付」配置，填写 HDupay 后台创建的 API 信息：
+
+| New-Api 配置项 | 填写内容 |
+|---|---|
+| 易支付网关 / 接口地址 | `https://你的HDupay域名/submit.php` |
+| PID / 商户 ID | HDupay 后台创建的 API Key |
+| Key / 通信密钥 | HDupay 后台创建的 API Secret |
+
+![New-Api 易支付配置](docs/images/newapi-1.png)
+
+### 2️⃣ 修改充值方式设置
+
+把 New-Api 的充值方式设置替换为下面内容，直接复制进去保存即可：
+
+```json
+[
+  {
+    "color": "black",
+    "min_topup": "1",
+    "name": "USDC/USDT",
+    "type": "USDC/USDT",
+    "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAAAXNSR0IArs4c6QAAA/ZJREFUaEPtWV1oFFcU/s7dXRPdiZJNRSsiihbxRayOsZZCa0UQUUEKfbDgT9GKL6K+FLRx7q5Y0BcLfZSCUmxfJAgqQRC0xSgmkyKCPojFgEhdiDZmdww1dY4Oychmnbl3Nrtm52EvhLBzz5z7fff8zr2EKkdBml8Q4aqnhhnZFmnLUpUFaUoiWN4zw7KpyuXeeb1qhQ0CVZqkYYGGC71PF/J2F4D3FzoYPF8QbR/LQn+8kb9WJuxlqc+9Zy7hMBj5BPgJOJGnJOen/u/kSd57OVEeyhgodQ/lAlwyW67Rm/Oe+f8DFBGhk5k6060fnKN9Xf9VQqY2BCpZUS17nxm/l9cS1StxIzCKlfgb40jfb1H2JZ4EwP0j/GpNq7zdryOhJyBG24Bxg8MD22snAhclXipASxlYqAM1agX8ZByxD+hkKy5kpb1NkPKgfqhUbji7cq1LvJUZ32rA3TYs++PYEfABOVnzHANfqQCmWwebad8DZVaadAv4gIfkyk8FcbeKQFLwouaOvr8nnIWCXqzWhUp1OlmzwIARBpAZa1qkXV4Yx4nXzQIeimLOvApFQkAyMds4fCsfWwsUc+YQGC0hAB8Zlj0vtkE8lGtfLdi9EQaQgAtpy94cWwLFnHkJjA2hBITYlO7ouRhLAs5RcwO7uFTt7o/WuwpHlCwU0FKDBM0FMJuYP1Hlf891KJHaO+2Hm4+jQKs5gSiLBsvQYzCfNaT9fSU66kngGcBdgOh6xcmuGfLms0qA+7L1JFCK9y0Zw+o9WwmRuBB4i5kI5wWJg1M7eh5GIVJ7AvTON7F3YpciIAMgQ4SM91sDbpBA29JW7wUdiZoT0PUvzrEVH7ojtEcQdjMwJxQg44oh7XWxI+ADcnLLVzALWwXQZXfndPnX6cnuhbQdpA+oKM39IJxUFLTutGV/FlsC/8pl81OUVAXrgGHZM2NLwAPmZM0Hqu9kkUjNVVXlSQ/i8t0sZs17AJaE7bIuKdSVwNCP7W1ixB1QuUiSxeJm2XNfESe6RDV+PkIzFzmIX2Tbt7hwO1UIhp2m6TNPdBdiR+C5XJ1J0kiP+pyI+w2rb0Hsgtg52r4RrvsdA5s09v/VsOxtEyYQdrzuX9oFKX4TVNLlwO+MWYLQxkRtYP4yiuMSsCtt2b9URcC/gYyyYG1l6LJh9a7X6dSfjY5doeoU1Xj+booTXzfJW16KVY7YEWDG9SlI7IkC3mMWGwIMFIhx6p+ng4c++ll9HlpqkroRIKAI4I7LuEOEP4edpouqfD+hOjCWhXQ+uMzvKF3mMwQa1/4yeId/CSgYqwRo4MWw+zRzvO+5zr+jzFfcSpQrbdwTR9lmhUzDAvV2odd2YUZPCPus4AAAAABJRU5ErkJggg=="
+  }
+]
+```
+
+![New-Api 充值方式设置](docs/images/newapi-2.png)
+
+### 3️⃣ 用户点击充值
+
+用户在 New-Api 充值页面点击 `USDC/USDT` 后，会跳转到 HDupay 支付页面完成稳定币付款。
+
+![New-Api 点击充值](docs/images/newapi-3.png)
+
+---
+
 ## 🏦 钱包与资产安全建议
 
 > 钱包相关功能涉及真实链上资产，请谨慎使用。
@@ -450,6 +505,7 @@ HDupay
 │
 ├── config/                # Webman 配置、路由、进程、数据库、链配置
 ├── database/              # schema.sql 数据库结构
+├── docs/                  # 文档图片与说明素材
 ├── public/                # 前端编译产物与静态资源
 ├── scripts/               # 数据迁移脚本
 ├── support/               # Webman 支撑文件
