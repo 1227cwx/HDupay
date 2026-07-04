@@ -1,0 +1,24 @@
+{
+  "name": "cwx-u-admin",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview --host 0.0.0.0"
+  },
+  "dependencies": {
+    "@vicons/ionicons5": "latest",
+    "naive-ui": "latest",
+    "pinia": "latest",
+    "vue": "latest",
+    "vue-router": "latest"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "latest",
+    "typescript": "latest",
+    "vite": "latest",
+    "vue-tsc": "latest"
+  }
+}

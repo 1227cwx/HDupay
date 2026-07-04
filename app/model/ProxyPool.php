@@ -1,0 +1,37 @@
+<?php
+
+namespace app\model;
+
+class ProxyPool extends BaseModel
+{
+    protected $table = 'proxy_pools';
+    protected $primaryKey = 'id';
+
+    public static function enabledList(): array
+    {
+        return self::query()
+            ->where('status', 'enabled')
+            ->orderBy('id')
+            ->get()
+            ->toArray();
+    }
+
+    public static function deleteById(int $id): int
+    {
+        return self::query()->where('id', $id)->delete();
+    }
+
+    public static function markStatus(int $id, string $status): bool
+    {
+        return self::updateById($id, ['status' => $status]);
+    }
+
+    public static function updateTestResult(int $id, string $status, string $message): bool
+    {
+        return self::updateById($id, [
+            'last_test_status' => $status,
+            'last_test_message' => substr($message, 0, 500),
+            'last_test_at' => self::now(),
+        ]);
+    }
+}
