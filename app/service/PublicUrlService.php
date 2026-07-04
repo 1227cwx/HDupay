@@ -33,6 +33,7 @@ class PublicUrlService
     {
         return [
             'public_base_url' => SystemSetting::getValue('site_public_base_url', ''),
+            'admin_allowed_domain' => (new AdminDomainAccessService())->allowedDomain(),
         ];
     }
 
@@ -49,6 +50,7 @@ class PublicUrlService
             }
         }
 
+        (new AdminDomainAccessService())->save((string)($input['admin_allowed_domain'] ?? ''), $publicBaseUrl);
         SystemSetting::saveValue('site_public_base_url', $publicBaseUrl);
         return $this->settings();
     }

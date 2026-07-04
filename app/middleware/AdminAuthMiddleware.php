@@ -3,6 +3,7 @@
 namespace app\middleware;
 
 use app\service\AdminAuthService;
+use app\service\AdminDomainAccessService;
 use Throwable;
 use Webman\Http\Request;
 use Webman\Http\Response;
@@ -12,6 +13,10 @@ class AdminAuthMiddleware implements MiddlewareInterface
 {
     public function process(Request $request, callable $handler): Response
     {
+        if (!(new AdminDomainAccessService())->isAdminAllowed($request)) {
+            return response('Not Found', 404);
+        }
+
         try {
             $loggedIn = (new AdminAuthService())->check($request);
         } catch (Throwable) {

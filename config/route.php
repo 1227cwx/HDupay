@@ -16,6 +16,8 @@ use app\controller\EasyPayController;
 use app\controller\IndexController;
 use app\controller\OpenApiController;
 use app\middleware\AdminAuthMiddleware;
+use app\middleware\AdminDomainMiddleware;
+use app\middleware\PublicDomainMiddleware;
 use Webman\Route;
 
 Route::disableDefaultRoute();
@@ -23,8 +25,8 @@ Route::disableDefaultRoute();
 /*
  * Admin frontend SPA routes.
  */
-Route::get('/', [IndexController::class, 'index']);
-Route::get('/login', [IndexController::class, 'index']);
+Route::get('/', [IndexController::class, 'index'])->middleware(PublicDomainMiddleware::class);
+Route::get('/login', [IndexController::class, 'index'])->middleware(PublicDomainMiddleware::class);
 Route::group('/hdupay', function () {
     Route::get('', [IndexController::class, 'index']);
     Route::get('/login', [IndexController::class, 'index']);
@@ -48,26 +50,26 @@ Route::group('/hdupay', function () {
     Route::get('/admin-profile', [IndexController::class, 'index']);
     Route::get('/fiat-rates', [IndexController::class, 'index']);
     Route::get('/admin-settings', [IndexController::class, 'index']);
-});
+})->middleware(AdminDomainMiddleware::class);
 
 /*
  * Public pay routes.
  */
 Route::group('/pay', function () {
     Route::get('', [IndexController::class, 'index']);
-});
-Route::get('/submit.php', [EasyPayController::class, 'submit']);
-Route::post('/submit.php', [EasyPayController::class, 'submit']);
+})->middleware(PublicDomainMiddleware::class);
+Route::get('/submit.php', [EasyPayController::class, 'submit'])->middleware(PublicDomainMiddleware::class);
+Route::post('/submit.php', [EasyPayController::class, 'submit'])->middleware(PublicDomainMiddleware::class);
 Route::group('/api/deposit', function () {
     Route::post('/create', [DepositController::class, 'create']);
     Route::get('/networks', [DepositController::class, 'networks']);
     Route::get('/options', [DepositController::class, 'options']);
     Route::get('/detail', [DepositController::class, 'detail']);
     Route::post('/status', [DepositController::class, 'status']);
-});
+})->middleware(PublicDomainMiddleware::class);
 Route::group('/api/easypay', function () {
     Route::post('/detail', [EasyPayController::class, 'detail']);
-});
+})->middleware(PublicDomainMiddleware::class);
 
 /*
  * OpenAPI routes. All endpoints use POST.
@@ -76,7 +78,7 @@ Route::group('/api/v1', function () {
     Route::post('/networks', [OpenApiController::class, 'networks']);
     Route::post('/orders/create', [OpenApiController::class, 'createOrder']);
     Route::post('/orders/status', [OpenApiController::class, 'orderStatus']);
-});
+})->middleware(PublicDomainMiddleware::class);
 
 /*
  * Admin API routes. Auth login routes are public, other routes require login.
@@ -87,7 +89,7 @@ Route::group('/admin', function () {
         Route::post('/logout', [AdminAuthController::class, 'logout']);
         Route::get('/me', [AdminAuthController::class, 'me']);
     });
-});
+})->middleware(AdminDomainMiddleware::class);
 
 Route::group('/admin', function () {
     Route::get('/dashboard/summary', [AdminDashboardController::class, 'summary']);
