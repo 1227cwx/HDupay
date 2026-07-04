@@ -33,18 +33,19 @@ class EvmMonitorService
             return ['network' => $networkCode, 'skipped' => '监听未启用', 'expired_frozen' => 0];
         }
 
+        $expired = $this->freezeExpiredOrders($networkCode);
         $activeMonitorCount = PaymentAddress::activeMonitorCount($networkCode);
         $confirmingCount = DepositOrder::confirmingCount($networkCode);
         if ($activeMonitorCount <= 0 && $confirmingCount <= 0) {
-            return ['network' => $networkCode, 'skipped' => '当前网络没有待监听订单', 'expired_frozen' => 0, 'confirmed' => 0, 'idle' => true];
+            return ['network' => $networkCode, 'skipped' => '当前网络没有待监听订单', 'expired_frozen' => $expired, 'confirmed' => 0, 'idle' => true];
         }
 
-        RpcNetworkSetting::markMonitorAt($networkCode);
         $latest = $rpc->getBlockNumber($networkCode);
+        RpcNetworkSetting::markMonitorAt($networkCode);
         $confirmed = $this->updateConfirmingOrders($networkCode, $latest);
         $activeMonitorCount = PaymentAddress::activeMonitorCount($networkCode);
         if ($activeMonitorCount <= 0) {
-            return ['network' => $networkCode, 'skipped' => '当前网络没有待监听地址', 'expired_frozen' => 0, 'confirmed' => $confirmed];
+            return ['network' => $networkCode, 'skipped' => '当前网络没有待监听地址', 'expired_frozen' => $expired, 'confirmed' => $confirmed];
         }
 
         $tokenCodes = array_values(array_unique(array_map(
@@ -52,7 +53,6 @@ class EvmMonitorService
             PaymentAddress::activeTokenCodes($networkCode)
         )));
         if (!$tokenCodes) {
-            $expired = $this->freezeExpiredOrders($networkCode);
             return ['network' => $networkCode, 'skipped' => '当前网络没有待监听代币', 'expired_frozen' => $expired, 'confirmed' => $confirmed];
         }
 
@@ -61,7 +61,7 @@ class EvmMonitorService
             'latest' => $latest,
             'logs' => 0,
             'matched' => 0,
-            'expired_frozen' => 0,
+            'expired_frozen' => $expired,
             'confirmed' => $confirmed,
             'tokens' => [],
         ];
@@ -81,7 +81,7 @@ class EvmMonitorService
             }
         }
         if ($this->isScanCaughtUp($summary['tokens'], $latest)) {
-            $summary['expired_frozen'] = $this->freezeExpiredOrders($networkCode);
+            $summary['expired_frozen'] += $this->freezeExpiredOrders($networkCode);
         } else {
             $summary['cursor_lag'] = true;
         }

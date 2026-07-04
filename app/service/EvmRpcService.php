@@ -411,13 +411,22 @@ class EvmRpcService
         }
         $this->applyRpcProxy($options, $cfg);
 
-        $response = $this->httpClient()->post($cfg['rpc_url'], $options);
-        return [
-            'status_code' => $response->getStatusCode(),
-            'body' => json_decode($bodyText = (string)$response->getBody(), true),
-            'raw_body' => $bodyText,
-            'json_error' => json_last_error_msg(),
-        ];
+        $response = null;
+        try {
+            $response = $this->httpClient()->post($cfg['rpc_url'], $options);
+            $body = $response->getBody();
+            $bodyText = (string)$body;
+            return [
+                'status_code' => $response->getStatusCode(),
+                'body' => json_decode($bodyText, true),
+                'raw_body' => $bodyText,
+                'json_error' => json_last_error_msg(),
+            ];
+        } finally {
+            if ($response !== null) {
+                $response->getBody()->close();
+            }
+        }
     }
 
     private function apiKeyPlaceholders(): array
@@ -607,8 +616,8 @@ class EvmRpcService
 
     private function httpClient(): Client
     {
-        static $factory = null;
-        if ($factory === null) {
+        static $client = null;
+        if ($client === null) {
             $factory = new ClientFactory(new class implements ContainerInterface {
                 public function get(string $id)
                 {
@@ -620,8 +629,9 @@ class EvmRpcService
                     return false;
                 }
             });
+            $client = $factory->create([]);
         }
 
-        return $factory->create([]);
+        return $client;
     }
 }
