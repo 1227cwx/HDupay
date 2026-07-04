@@ -92,7 +92,7 @@ const sampleRateRows = computed(() => (rateTestResult.value?.sample_rates || [])
 async function loadSystemSettings() {
   settingsLoading.value = true
   try {
-    const [settings, options]: any[] = await Promise.all([api.get('/admin/system/settings'), api.get('/api/deposit/options')])
+    const [settings, options]: any[] = await Promise.all([api.get('/admin/system/settings'), api.get('/admin/deposit/options')])
     proxies.value = settings.proxies || []
     applyFiatRate(settings.fiat_rate || {})
     fiatRates.value = settings.fiat_rates || buildFallbackRates(options.fiat_currencies || fallbackFiatOptions)

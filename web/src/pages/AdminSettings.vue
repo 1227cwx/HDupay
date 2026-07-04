@@ -267,7 +267,7 @@ async function loadSystemSettings() {
   try {
     const [settings, options]: any[] = await Promise.all([
       api.get('/admin/system/settings'),
-      api.get('/api/deposit/options')
+      api.get('/admin/deposit/options')
     ])
     proxies.value = settings.proxies || []
     applyFiatRate(settings.fiat_rate || {})

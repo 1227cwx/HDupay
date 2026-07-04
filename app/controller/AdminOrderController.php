@@ -9,6 +9,24 @@ use Throwable;
 
 class AdminOrderController extends BaseController
 {
+    public function networks(Request $request)
+    {
+        try {
+            return $this->ok((new DepositService())->networks());
+        } catch (Throwable $e) {
+            return $this->fail($e);
+        }
+    }
+
+    public function options(Request $request)
+    {
+        try {
+            return $this->ok((new DepositService())->options());
+        } catch (Throwable $e) {
+            return $this->fail($e);
+        }
+    }
+
     public function list(Request $request)
     {
         try {

@@ -87,8 +87,8 @@ const fiatSymbolText = computed(() => fiatSymbol(form.fiat_currency, fiatOptions
 async function loadInit() {
   try {
     const [networks, options]: any[] = await Promise.all([
-      api.get('/api/deposit/networks'),
-      api.get('/api/deposit/options')
+      api.get('/admin/deposit/networks'),
+      api.get('/admin/deposit/options')
     ])
     networkOptions.value = networks
     fiatOptions.value = options.fiat_currencies || fallbackFiatOptions

@@ -157,6 +157,8 @@ Route::group('/admin', function () {
     Route::get('/address/list', [AdminAddressController::class, 'list']);
 
     Route::group('/deposit', function () {
+        Route::get('/networks', [AdminOrderController::class, 'networks']);
+        Route::get('/options', [AdminOrderController::class, 'options']);
         Route::get('/list', [AdminOrderController::class, 'list']);
         Route::post('/create', [AdminOrderController::class, 'create']);
         Route::get('/detail', [AdminOrderController::class, 'detail']);

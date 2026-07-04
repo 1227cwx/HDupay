@@ -173,7 +173,7 @@ async function load(silent = false) {
 
 async function loadOptions() {
   try {
-    const options: any = await api.get('/api/deposit/options')
+    const options: any = await api.get('/admin/deposit/options')
     fiatOptions.value = options.fiat_currencies || fallbackFiatOptions
   } catch {
     fiatOptions.value = fallbackFiatOptions
