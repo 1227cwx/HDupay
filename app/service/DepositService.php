@@ -186,6 +186,15 @@ class DepositService
             default => 0,
         };
 
+        $returnInfo = ($order['source'] ?? '') === 'epay'
+            ? (new EasyPayService())->returnUrlForDepositOrder($order)
+            : [
+                'return_url' => (string)($order['return_url'] ?? ''),
+                'return_url_signed' => false,
+                'return_url_append_status' => true,
+                'return_url_close_on_empty' => false,
+            ];
+
         return [
             'order_no' => $orderNo,
             'status' => $status,
@@ -197,10 +206,10 @@ class DepositService
             'product_name' => $this->productNameForOrder($order),
             'address' => (string)$order['address'],
             'expire_at' => (string)$order['expire_at'],
-            'return_url' => ($order['source'] ?? '') === 'epay'
-                ? (new EasyPayService())->signedReturnUrlForDepositOrder($order)
-                : (string)($order['return_url'] ?? ''),
-            'return_url_signed' => ($order['source'] ?? '') === 'epay',
+            'return_url' => (string)$returnInfo['return_url'],
+            'return_url_signed' => (bool)$returnInfo['return_url_signed'],
+            'return_url_append_status' => (bool)$returnInfo['return_url_append_status'],
+            'return_url_close_on_empty' => (bool)$returnInfo['return_url_close_on_empty'],
             'pay_url' => $this->payUrl($orderNo, $baseUrl),
         ];
     }

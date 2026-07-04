@@ -74,7 +74,7 @@
                 <n-text strong :style="successTitleStyle">{{ text.tradeSuccess }}</n-text>
                 <n-text depth="3">{{ successRedirectText }}</n-text>
               </n-space>
-              <n-button secondary type="primary" @click="redirectAfterSuccess">{{ text.redirectNow }}</n-button>
+              <n-button secondary type="primary" @click="redirectAfterSuccess">{{ redirectButtonText }}</n-button>
             </n-space>
           </n-card>
 
@@ -189,8 +189,11 @@ const text = {
   pleaseWait: '\u8bf7\u7a0d\u540e',
   tradeSuccess: '\u4ea4\u6613\u6210\u529f',
   redirectNow: '\u7acb\u5373\u8df3\u8f6c',
+  closePage: '\u5173\u95ed\u9875\u9762',
   secondsRedirect: '\u79d2\u540e\u8df3\u8f6c',
   secondsRefresh: '\u79d2\u540e\u5237\u65b0\u9875\u9762',
+  secondsClose: '\u79d2\u540e\u5173\u95ed\u9875\u9762',
+  closePageTip: '\u652f\u4ed8\u6210\u529f\uff0c\u8bf7\u624b\u52a8\u5173\u95ed\u5f53\u524d\u9875\u9762',
   backToPay: '\u8fd4\u56de\u652f\u4ed8\u9875',
   accessDeniedDesc: '\u8bf7\u91cd\u65b0\u521b\u5efa\u8ba2\u5355\u6216\u8054\u7cfb\u5546\u6237\u786e\u8ba4\u8ba2\u5355\u72b6\u6001\u3002',
   expired: '\u5df2\u8fc7\u671f',
@@ -215,6 +218,8 @@ const progress = ref(0)
 const now = ref(Date.now())
 const successRedirectSeconds = ref(0)
 const successHandled = ref(false)
+const closePageAttempted = ref(false)
+const fallbackReturnUrl = ref('')
 const form = reactive({ network: null as string | null, token: 'USDC', fiat_currency: 'CNY', fiat_amount: '' })
 const payment = ref<any>({})
 const epayInfo = ref<any>({})
@@ -247,8 +252,13 @@ const countdownType = computed(() => {
   if (remainingSeconds.value <= 60) return 'warning'
   return 'success'
 })
+const shouldCloseAfterSuccess = computed(() => Boolean(payment.value.return_url_close_on_empty && !payment.value.return_url))
+const redirectButtonText = computed(() => shouldCloseAfterSuccess.value ? text.closePage : text.redirectNow)
 const successRedirectText = computed(() => {
-  const suffix = payment.value.return_url ? text.secondsRedirect : text.secondsRefresh
+  if (shouldCloseAfterSuccess.value && closePageAttempted.value) return text.closePageTip
+  const suffix = payment.value.return_url
+    ? text.secondsRedirect
+    : (shouldCloseAfterSuccess.value ? text.secondsClose : text.secondsRefresh)
   return `${successRedirectSeconds.value || 5} ${suffix}`
 })
 
@@ -311,12 +321,17 @@ async function loadInit() {
 async function create() {
   creating.value = true
   try {
-    const payload = { ...form, epay_order_no: epayOrderNo.value || undefined }
+    const payload = {
+      ...form,
+      epay_order_no: epayOrderNo.value || undefined,
+      fallback_return_url: epayOrderNo.value ? (fallbackReturnUrl.value || undefined) : undefined
+    }
     const data: any = await api.post('/api/deposit/create', payload)
     setPayment(data)
     epayInfo.value = {}
     epayOrderNo.value = ''
     progress.value = 0
+    closePageAttempted.value = false
     accessError.value = ''
     message.success(text.created)
     await router.replace({ path: '/pay', query: { order_no: data.order_no } })
@@ -329,6 +344,7 @@ async function create() {
 }
 
 async function loadEasyPayOrder(orderNo: string) {
+  captureFallbackReturnUrl()
   loadingOrder.value = true
   try {
     const data: any = await api.post('/api/easypay/detail', { epay_order_no: orderNo })
@@ -410,6 +426,7 @@ function setPayment(data: any) {
 async function handleSuccess() {
   if (successHandled.value) return
   successHandled.value = true
+  closePageAttempted.value = false
   stopPolling()
   progress.value = 100
   successRedirectSeconds.value = 5
@@ -420,9 +437,18 @@ async function handleSuccess() {
 
 function redirectAfterSuccess() {
   if (payment.value.return_url) {
-    window.location.href = payment.value.return_url_signed
-      ? payment.value.return_url
-      : withReturnQuery(payment.value.return_url, payment.value.order_no)
+    if (payment.value.return_url_signed) {
+      window.location.href = payment.value.return_url
+      return
+    }
+    window.location.href = payment.value.return_url_append_status
+      ? withReturnQuery(payment.value.return_url, payment.value.order_no)
+      : payment.value.return_url
+    return
+  }
+  if (shouldCloseAfterSuccess.value) {
+    closePageAttempted.value = true
+    window.close()
     return
   }
   window.location.href = '/pay'
@@ -439,6 +465,25 @@ function withReturnQuery(url: string, orderNo: string) {
   }
 }
 
+function captureFallbackReturnUrl() {
+  if (fallbackReturnUrl.value) return
+  const referrer = validExternalReferrer()
+  if (referrer) fallbackReturnUrl.value = referrer
+}
+
+function validExternalReferrer() {
+  const referrer = String(document.referrer || '').trim()
+  if (!referrer) return ''
+  try {
+    const target = new URL(referrer)
+    if (!['http:', 'https:'].includes(target.protocol)) return ''
+    if (target.origin === window.location.origin) return ''
+    return target.toString()
+  } catch {
+    return ''
+  }
+}
+
 function copyAddress() {
   const address = String(payment.value.address || '')
   if (!address) return
@@ -449,6 +494,7 @@ function copyAddress() {
 function backToPay() {
   payment.value = {}
   accessError.value = ''
+  closePageAttempted.value = false
   router.replace('/pay')
 }
 

@@ -36,6 +36,7 @@ class EasyPayService
         }
 
         $this->validateSubmitParams($params, $client);
+        $returnUrl = $this->normalizeOptionalReturnUrl((string)($params['return_url'] ?? ''));
         OpenApiClient::updateLastUsed((int)$client['id'], $request->getRealIp(false));
 
         $existing = EasyPayOrder::findByClientAndOutTradeNo((int)$client['id'], (string)$params['out_trade_no']);
@@ -44,6 +45,7 @@ class EasyPayService
         }
 
         $storedParams = $params;
+        $storedParams['return_url'] = $returnUrl;
         unset($storedParams['type']);
         $order = EasyPayOrder::createRecord([
             'api_client_id' => (int)$client['id'],
@@ -54,7 +56,7 @@ class EasyPayService
             'name' => (string)($params['name'] ?? ''),
             'money' => (string)$params['money'],
             'notify_url' => $this->effectiveNotifyUrlForSubmit($params, $client),
-            'return_url' => (string)($params['return_url'] ?? ''),
+            'return_url' => $returnUrl,
             'request_params' => json_encode($storedParams, JSON_UNESCAPED_UNICODE),
             'status' => 'pending',
             'notify_status' => 'pending',
@@ -118,7 +120,11 @@ class EasyPayService
         $input['api_client_id'] = (int)$order['api_client_id'];
         $input['fiat_currency'] = 'CNY';
         $input['fiat_amount'] = (string)$order['money'];
-        $input['return_url'] = (string)($order['return_url'] ?? '');
+        $returnUrl = $this->normalizeOptionalReturnUrl((string)($order['return_url'] ?? ''));
+        if ($returnUrl === '') {
+            $returnUrl = $this->normalizeOptionalReturnUrl((string)($input['fallback_return_url'] ?? ''));
+        }
+        $input['return_url'] = $returnUrl;
         return $input;
     }
 
@@ -212,17 +218,43 @@ class EasyPayService
         return ['ok' => true, 'http_status' => $statusCode, 'response_body' => $responseBody];
     }
 
-    public function signedReturnUrlForDepositOrder(array $depositOrder): string
+    public function returnUrlForDepositOrder(array $depositOrder): array
     {
         $epayOrder = EasyPayOrder::findByDepositOrderNo((string)($depositOrder['order_no'] ?? ''));
         if (!$epayOrder) {
-            return (string)($depositOrder['return_url'] ?? '');
-        }
-        $returnUrl = trim((string)($epayOrder['return_url'] ?? ''));
-        if ($returnUrl === '') {
-            return '';
+            return [
+                'return_url' => (string)($depositOrder['return_url'] ?? ''),
+                'return_url_signed' => false,
+                'return_url_append_status' => false,
+                'return_url_close_on_empty' => false,
+            ];
         }
 
+        $returnUrl = $this->normalizeOptionalReturnUrl((string)($epayOrder['return_url'] ?? ''));
+        if ($returnUrl !== '') {
+            return [
+                'return_url' => $this->buildSignedReturnUrl($returnUrl, $epayOrder),
+                'return_url_signed' => true,
+                'return_url_append_status' => false,
+                'return_url_close_on_empty' => true,
+            ];
+        }
+
+        return [
+            'return_url' => trim((string)($depositOrder['return_url'] ?? '')),
+            'return_url_signed' => false,
+            'return_url_append_status' => false,
+            'return_url_close_on_empty' => true,
+        ];
+    }
+
+    public function signedReturnUrlForDepositOrder(array $depositOrder): string
+    {
+        return (string)$this->returnUrlForDepositOrder($depositOrder)['return_url'];
+    }
+
+    private function buildSignedReturnUrl(string $returnUrl, array $epayOrder): string
+    {
         try {
             $client = OpenApiClient::findById((int)$epayOrder['api_client_id']);
             if (!$client) {
@@ -315,9 +347,6 @@ class EasyPayService
         if ($this->clientCallbackUrl($client) === '') {
             $this->validateUrl((string)$params['notify_url'], '异步回调地址');
         }
-        if (trim((string)($params['return_url'] ?? '')) !== '') {
-            $this->validateUrl((string)$params['return_url'], '同步跳转地址');
-        }
         if (strlen((string)$params['out_trade_no']) > 128) {
             throw new InvalidArgumentException('商户订单号过长');
         }
@@ -358,6 +387,22 @@ class EasyPayService
         if (!in_array($scheme, ['http', 'https'], true) || !filter_var($url, FILTER_VALIDATE_URL)) {
             throw new InvalidArgumentException($label . '必须是 http 或 https 地址');
         }
+    }
+
+    private function normalizeOptionalReturnUrl(string $url): string
+    {
+        $url = trim($url);
+        if ($url === '') {
+            return '';
+        }
+        if (strlen($url) > 1000 || preg_match('/[\x00-\x1F\x7F]/', $url)) {
+            return '';
+        }
+        $scheme = strtolower((string)parse_url($url, PHP_URL_SCHEME));
+        if (!in_array($scheme, ['http', 'https'], true) || !filter_var($url, FILTER_VALIDATE_URL)) {
+            return '';
+        }
+        return $url;
     }
 
     private function normalizeParams(array $input): array
