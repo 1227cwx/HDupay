@@ -639,3 +639,10 @@ LICENSE
 
 那么 HDupay 可以作为一个完整的学习参考项目。  
 请记住：**学习环境和生产环境之间，还有安全、合规、风控、审计、运维等大量工作需要完成。**
+
+---
+
+## ?? Community
+
+This open-source project is linked with and recognizes the [LINUX DO](https://linux.do) community.
+
