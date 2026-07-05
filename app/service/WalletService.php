@@ -3,9 +3,11 @@
 namespace app\service;
 
 use app\model\AuditLog;
+use app\model\AdminLoginAttempt;
 use app\model\CollectionTask;
 use app\model\DepositOrder;
 use app\model\EasyPayOrder;
+use app\model\FiatExchangeRate;
 use app\model\GasFundingTransaction;
 use app\model\MonitorCursor;
 use app\model\OpenApiClient;
@@ -216,6 +218,8 @@ class WalletService
                 'deleted_withdraw_settings' => $this->deleteAllRows(WithdrawSetting::class),
                 'deleted_monitor_cursors' => $this->deleteAllRows(MonitorCursor::class),
                 'deleted_open_api_clients' => $this->deleteAllRows(OpenApiClient::class),
+                'deleted_fiat_exchange_rates' => $this->deleteAllRows(FiatExchangeRate::class),
+                'deleted_admin_login_attempts' => $this->deleteAllRows(AdminLoginAttempt::class),
                 'deleted_audit_logs' => $this->deleteAllRows(AuditLog::class),
                 'deleted_network_accounts' => $this->deleteAllRows(WalletAccount::class),
                 'deleted_root_wallets' => $this->deleteAllRows(WalletMaster::class),
