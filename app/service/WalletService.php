@@ -2,9 +2,13 @@
 
 namespace app\service;
 
+use app\model\AuditLog;
 use app\model\CollectionTask;
 use app\model\DepositOrder;
+use app\model\EasyPayOrder;
 use app\model\GasFundingTransaction;
+use app\model\MonitorCursor;
+use app\model\OpenApiClient;
 use app\model\OpenApiCallbackLog;
 use app\model\PaymentAddress;
 use app\model\WalletCollectionAddress;
@@ -198,48 +202,31 @@ class WalletService
         $masterId = (int)($input['wallet_master_id'] ?? 0);
         (new EvmWalletService())->verifyRootWalletMnemonic($masterId, (string)($input['mnemonic'] ?? ''));
 
-        $accounts = WalletAccount::listByMasterId($masterId);
-        $accountIds = WalletAccount::idsByMasterId($masterId);
-        $addressIds = PaymentAddress::idsByWalletAccountIds($accountIds);
-        $orderNos = DepositOrder::orderNosByAddressIds($addressIds);
-        $relatedAddresses = PaymentAddress::addressLowersByWalletAccountIds($accountIds);
-        foreach ($accounts as $account) {
-            foreach (['collection_address', 'gas_funder_address'] as $field) {
-                $address = strtolower(trim((string)($account[$field] ?? '')));
-                if ($address !== '') {
-                    $relatedAddresses[] = $address;
-                }
+        return WalletMaster::query()->getModel()->getConnection()->transaction(function () use ($masterId) {
+            $deleted = [
+                'wallet_master_id' => $masterId,
+                'deleted_callback_logs' => $this->deleteAllRows(OpenApiCallbackLog::class),
+                'deleted_easypay_orders' => $this->deleteAllRows(EasyPayOrder::class),
+                'deleted_orders' => $this->deleteAllRows(DepositOrder::class),
+                'deleted_collection_tasks' => $this->deleteAllRows(CollectionTask::class),
+                'deleted_withdrawal_tasks' => $this->deleteAllRows(WithdrawalTask::class),
+                'deleted_gas_funding_transactions' => $this->deleteAllRows(GasFundingTransaction::class),
+                'deleted_payment_addresses' => $this->deleteAllRows(PaymentAddress::class),
+                'deleted_collection_wallets' => $this->deleteAllRows(WalletCollectionAddress::class),
+                'deleted_withdraw_settings' => $this->deleteAllRows(WithdrawSetting::class),
+                'deleted_monitor_cursors' => $this->deleteAllRows(MonitorCursor::class),
+                'deleted_open_api_clients' => $this->deleteAllRows(OpenApiClient::class),
+                'deleted_audit_logs' => $this->deleteAllRows(AuditLog::class),
+                'deleted_network_accounts' => $this->deleteAllRows(WalletAccount::class),
+                'deleted_root_wallets' => $this->deleteAllRows(WalletMaster::class),
+            ];
+
+            if ($deleted['deleted_root_wallets'] <= 0) {
+                throw new InvalidArgumentException('根钱包删除失败');
             }
-        }
 
-        $deletedCallbackLogs = OpenApiCallbackLog::deleteByOrderNos($orderNos);
-        $deletedOrders = DepositOrder::deleteByAddressIds($addressIds);
-        $deletedCollections = CollectionTask::deleteByAddressIds($addressIds);
-        $deletedWithdrawals = WithdrawalTask::deleteByWalletAccountIds($accountIds);
-        $deletedGasFunding = GasFundingTransaction::deleteByAddresses($relatedAddresses);
-        $deletedAddresses = PaymentAddress::deleteByWalletAccountIds($accountIds);
-        $deletedSystemCollectionWallets = WalletCollectionAddress::deleteSystemByAccountIds($accountIds);
-        $deletedWithdrawSettings = WithdrawSetting::deleteByAccountIds($accountIds);
-        $deletedAccounts = WalletAccount::deleteByMasterId($masterId);
-        $deletedMasters = WalletMaster::deleteById($masterId);
-
-        if ($deletedMasters <= 0) {
-            throw new InvalidArgumentException('根钱包删除失败');
-        }
-
-        return [
-            'wallet_master_id' => $masterId,
-            'deleted_orders' => $deletedOrders,
-            'deleted_callback_logs' => $deletedCallbackLogs,
-            'deleted_collection_tasks' => $deletedCollections,
-            'deleted_withdrawal_tasks' => $deletedWithdrawals,
-            'deleted_gas_funding_transactions' => $deletedGasFunding,
-            'deleted_payment_addresses' => $deletedAddresses,
-            'deleted_system_collection_wallets' => $deletedSystemCollectionWallets,
-            'deleted_withdraw_settings' => $deletedWithdrawSettings,
-            'deleted_network_accounts' => $deletedAccounts,
-            'deleted_network_account_ids' => $accountIds,
-        ];
+            return $deleted;
+        });
     }
 
     public function createAccount(array $input): array
@@ -397,6 +384,15 @@ class WalletService
     private function formatTokenAmount(string $amountInt, int $decimals): string
     {
         return (new TokenAmountService())->toDisplay($amountInt, $decimals);
+    }
+
+    private function deleteAllRows(string $modelClass): int
+    {
+        $count = (int)$modelClass::query()->count();
+        if ($count > 0) {
+            $modelClass::query()->delete();
+        }
+        return $count;
     }
 
     private function groupStats(array $rows): array
