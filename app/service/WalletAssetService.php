@@ -110,9 +110,11 @@ class WalletAssetService
 
     public function setCollectionSyncEnabled(int $id, bool $enabled): array
     {
-        if (!WalletCollectionAddress::findById($id)) {
+        $row = WalletCollectionAddress::findById($id);
+        if (!$row) {
             throw new RuntimeException('归集地址不存在');
         }
+        $this->activeAccount((int)$row['wallet_account_id']);
         WalletCollectionAddress::updateById($id, ['sync_enabled' => $enabled ? 1 : 0]);
         return $this->collectionWallets();
     }
@@ -196,10 +198,7 @@ class WalletAssetService
 
     public function setGasSyncEnabled(int $walletAccountId, bool $enabled): array
     {
-        $account = WalletAccount::findById($walletAccountId);
-        if (!$account) {
-            throw new RuntimeException('网络账户不存在');
-        }
+        $this->activeAccount($walletAccountId);
         WalletAccount::updateById($walletAccountId, ['gas_sync_enabled' => $enabled ? 1 : 0]);
         return $this->gasWallets();
     }

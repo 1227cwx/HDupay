@@ -68,6 +68,9 @@ class WithdrawalService
         $exists = $id > 0 ? WithdrawSetting::findById($id) : null;
         $walletAccountId = $exists ? (int)$exists['wallet_account_id'] : (int)($input['wallet_account_id'] ?? 0);
         $account = $this->taskAccount($walletAccountId);
+        if (($account['status'] ?? '') !== 'active') {
+            throw new RuntimeException('网络账户已停用，请先启用后再修改转出设置');
+        }
         $tokenCode = strtoupper((string)($input['token_code'] ?? ($exists['token_code'] ?? 'USDC')));
         if (!in_array($tokenCode, self::PAYMENT_TOKEN_CODES, true)) {
             throw new InvalidArgumentException('转出代币只支持 USDC 或 USDT');
