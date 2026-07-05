@@ -11,7 +11,10 @@ class AdminAuthController extends BaseController
     public function login(Request $request)
     {
         try {
-            return $this->ok((new AdminAuthService())->login($this->input($request), $request->getRealIp(false), $request->session()), '登录成功');
+            $admin = (new AdminAuthService())->login($this->input($request), $request->getRealIp(false));
+            $request->session()->set('admin_user_id', (int)$admin['id']);
+            $request->session()->set('admin_username', (string)$admin['username']);
+            return $this->ok($admin, '登录成功');
         } catch (Throwable $e) {
             return $this->fail($e);
         }
@@ -20,7 +23,9 @@ class AdminAuthController extends BaseController
     public function logout(Request $request)
     {
         try {
-            return $this->ok((new AdminAuthService())->logout($request->session()), '已退出登录');
+            $request->session()->delete('admin_user_id');
+            $request->session()->delete('admin_username');
+            return $this->ok(true, '已退出登录');
         } catch (Throwable $e) {
             return $this->fail($e);
         }
@@ -42,7 +47,9 @@ class AdminAuthController extends BaseController
     public function updateProfile(Request $request)
     {
         try {
-            return $this->ok((new AdminAuthService())->updateProfile($this->input($request), (int)$request->session()->get('admin_user_id', 0), $request->session()), '管理员信息已保存');
+            $admin = (new AdminAuthService())->updateProfile($this->input($request), (int)$request->session()->get('admin_user_id', 0));
+            $request->session()->set('admin_username', (string)($admin['username'] ?? ''));
+            return $this->ok($admin, '管理员信息已保存');
         } catch (Throwable $e) {
             return $this->fail($e);
         }

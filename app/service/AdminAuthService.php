@@ -12,7 +12,7 @@ class AdminAuthService
     private const LOCK_SECONDS = 600;
     private const MAX_FAILURES = 5;
 
-    public function login(array $input, string $ip, mixed $session): array
+    public function login(array $input, string $ip): array
     {
 
         $username = trim((string)($input['username'] ?? ''));
@@ -32,18 +32,9 @@ class AdminAuthService
 
         AdminLoginAttempt::clearByUsernameIp($rateKey, $ip);
 
-        $session->set('admin_user_id', (int)$admin['id']);
-        $session->set('admin_username', $admin['username']);
         AdminUser::markLogin((int)$admin['id']);
 
         return $this->safeAdmin($admin);
-    }
-
-    public function logout(mixed $session): bool
-    {
-        $session->delete('admin_user_id');
-        $session->delete('admin_username');
-        return true;
     }
 
     public function current(int $adminId): array
@@ -60,7 +51,7 @@ class AdminAuthService
         return $this->current($adminId) !== [];
     }
 
-    public function updateProfile(array $input, int $adminId, mixed $session): array
+    public function updateProfile(array $input, int $adminId): array
     {
         $admin = $this->requireCurrentAdmin($adminId);
         $adminId = (int)$admin['id'];
@@ -82,7 +73,6 @@ class AdminAuthService
         }
 
         AdminUser::updateProfile($adminId, $username, $nickname);
-        $session->set('admin_username', $username);
 
         $updated = AdminUser::findActiveById($adminId);
         return $updated ? $this->safeAdmin($updated) : [];
