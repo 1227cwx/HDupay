@@ -215,20 +215,11 @@ class EvmWalletService
 
         $crypto = new CryptoService();
         $secret = trim($crypto->decrypt($encrypted));
-        $accountRootPath = $this->accountPrefixFromDepositPath((string)($account['derivation_path'] ?? ''));
         if (str_starts_with($secret, 'xprv')) {
             return $this->parseExtendedPrivateKey($secret);
         }
 
-        if (preg_match('/^[a-f0-9]{128}$/i', $secret)) {
-            $xprv = $this->accountExtendedPrivateKeyFromSeed($secret, $accountRootPath);
-            if (!empty($account['id'])) {
-                WalletAccount::updateById((int)$account['id'], ['encrypted_xprv' => $crypto->encrypt($xprv)]);
-            }
-            return $this->parseExtendedPrivateKey($xprv);
-        }
-
-        throw new RuntimeException('网络账户私钥格式无效');
+        throw new RuntimeException('网络账户私钥格式无效，请删除旧根钱包后重新创建');
     }
 
     private function accountExtendedPrivateKeyFromSeed(string $seedHex, string $accountRootPath): string
