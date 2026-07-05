@@ -3,6 +3,7 @@
 namespace app\service;
 
 use app\model\DepositOrder;
+use app\model\EasyPayOrder;
 use app\model\OpenApiCallbackLog;
 use app\model\OpenApiClient;
 use GuzzleHttp\Client;
@@ -111,7 +112,29 @@ class OpenApiService
         if (!OpenApiClient::findById($id)) {
             throw new InvalidArgumentException('API 信息不存在');
         }
+        $this->assertCanDelete($id);
         return OpenApiClient::deleteById($id) > 0;
+    }
+
+    private function assertCanDelete(int $id): void
+    {
+        $items = [];
+        $depositOrders = DepositOrder::countByField('api_client_id', $id);
+        $easyPayOrders = EasyPayOrder::countByField('api_client_id', $id);
+        $callbackLogs = OpenApiCallbackLog::countByField('client_id', $id);
+
+        if ($depositOrders > 0) {
+            $items[] = '关联订单 ' . $depositOrders . ' 条';
+        }
+        if ($easyPayOrders > 0) {
+            $items[] = '关联易支付订单 ' . $easyPayOrders . ' 条';
+        }
+        if ($callbackLogs > 0) {
+            $items[] = '关联回调日志 ' . $callbackLogs . ' 条';
+        }
+        if ($items) {
+            throw new InvalidArgumentException('该 API 已有' . implode('、', $items) . '，不能删除');
+        }
     }
 
     public function networks(array $input, string $ip): array
