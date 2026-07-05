@@ -133,7 +133,7 @@ class OpenApiService
             $items[] = '关联回调日志 ' . $callbackLogs . ' 条';
         }
         if ($items) {
-            throw new InvalidArgumentException('该 API 已有' . implode('、', $items) . '，不能删除');
+            throw new InvalidArgumentException('该 API 已产生关联数据,无法删除。请禁用');
         }
     }
 
