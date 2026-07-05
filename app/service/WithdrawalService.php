@@ -204,7 +204,7 @@ class WithdrawalService
             if (!$task) {
                 continue;
             }
-            $results[] = $this->processWithFailureHandling($task);
+            $results[] = $this->processWithFailureHandling($task, false, true);
         }
         return $results;
     }
@@ -218,7 +218,7 @@ class WithdrawalService
         if (($task['status'] ?? '') !== 'withdraw_failed') {
             throw new RuntimeException('只有转出失败的记录才允许手动重新转出');
         }
-        return $this->processWithFailureHandling($task, true);
+        return $this->processWithFailureHandling($task, true, true);
     }
 
     private function processTasks(array $tasks): array
@@ -230,20 +230,72 @@ class WithdrawalService
         return $results;
     }
 
-    private function processWithFailureHandling(array $task, bool $throwOnFailure = false): array
+    private function processWithFailureHandling(array $task, bool $throwOnFailure = false, bool $manual = false): array
     {
-        if (WithdrawalTask::shouldCountRetry((string)$task['status'])) {
-            WithdrawalTask::markRetryAttempt((int)$task['id']);
+        $taskId = (int)($task['id'] ?? 0);
+        $originalStatus = (string)($task['status'] ?? '');
+        $networkCode = (string)($task['network_code'] ?? '');
+        $tokenCode = strtoupper((string)($task['token_code'] ?? ''));
+        $lockAcquired = WithdrawalTask::acquireNetworkTokenLock($networkCode, $tokenCode);
+        if (!$lockAcquired) {
+            if ($throwOnFailure) {
+                throw new RuntimeException('同网络同代币转出任务正在处理，请稍后再试');
+            }
+            return [
+                'task_id' => $taskId,
+                'ok' => true,
+                'skipped' => true,
+                'reason' => 'network_token_locked',
+            ];
         }
 
+        $claimed = false;
         try {
-            return $this->processOne($task);
-        } catch (Throwable $e) {
-            WithdrawalTask::mark((int)$task['id'], 'withdraw_failed', ['error_message' => $e->getMessage()]);
-            if ($throwOnFailure) {
-                throw $e;
+            if (WithdrawalTask::hasEarlierBlockingTask($task)) {
+                if ($throwOnFailure) {
+                    throw new RuntimeException('同网络同代币已有更早的转出任务未完成，请稍后再试');
+                }
+                return [
+                    'task_id' => $taskId,
+                    'ok' => true,
+                    'skipped' => true,
+                    'reason' => 'network_token_busy',
+                ];
             }
-            return ['task_id' => $task['id'], 'ok' => false, 'error' => $e->getMessage()];
+
+            if (WithdrawalTask::isClaimableStatus($originalStatus)) {
+                $claimed = WithdrawalTask::claimForProcessing($taskId, $originalStatus, $manual);
+                if (!$claimed) {
+                    if ($throwOnFailure) {
+                        throw new RuntimeException('转出任务已被其他进程处理，请刷新后重试');
+                    }
+                    return [
+                        'task_id' => $taskId,
+                        'ok' => true,
+                        'skipped' => true,
+                        'reason' => 'claim_failed',
+                    ];
+                }
+                if (WithdrawalTask::shouldCountRetry($originalStatus)) {
+                    WithdrawalTask::markRetryAttempt($taskId);
+                }
+            }
+
+            try {
+                $result = $this->processOne($task);
+                if ($claimed) {
+                    WithdrawalTask::restoreProcessingStatus($taskId, $originalStatus);
+                }
+                return $result;
+            } catch (Throwable $e) {
+                WithdrawalTask::mark($taskId, 'withdraw_failed', ['error_message' => $e->getMessage()]);
+                if ($throwOnFailure) {
+                    throw $e;
+                }
+                return ['task_id' => $taskId, 'ok' => false, 'error' => $e->getMessage()];
+            }
+        } finally {
+            WithdrawalTask::releaseNetworkTokenLock($networkCode, $tokenCode);
         }
     }
 
@@ -255,6 +307,16 @@ class WithdrawalService
         }
         if ($task['status'] === 'withdrawing') {
             return $this->checkWithdrawing($task, $rpc);
+        }
+        if (!empty($task['withdraw_tx_hash'])) {
+            WithdrawalTask::mark((int)$task['id'], 'withdrawing');
+            $task['status'] = 'withdrawing';
+            return $this->checkWithdrawing($task, $rpc);
+        }
+        if (!empty($task['gas_funding_tx_hash'])) {
+            WithdrawalTask::mark((int)$task['id'], 'gas_funding');
+            $task['status'] = 'gas_funding';
+            return $this->checkGasFunding($task, $rpc);
         }
 
         $account = $this->taskAccount((int)$task['wallet_account_id']);

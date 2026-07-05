@@ -32,6 +32,8 @@ class WithdrawalTask extends BaseModel
 
     public const PROCESSABLE_STATUSES = ['pending_withdraw', 'withdraw_failed', 'gas_funding', 'withdrawing', 'manual_required'];
     public const RETRY_STATUSES = ['withdraw_failed', 'manual_required'];
+    public const CLAIMABLE_STATUSES = ['pending_withdraw', 'withdraw_failed', 'manual_required'];
+    public const BLOCKING_STATUSES = ['pending_withdraw', 'gas_funding', 'withdrawing', 'processing'];
 
     public static function createPending(array $data): array
     {
@@ -103,7 +105,7 @@ class WithdrawalTask extends BaseModel
     {
         return (int)self::query()
             ->where('wallet_account_id', $walletAccountId)
-            ->whereIn('status', ['pending_withdraw', 'gas_funding', 'withdrawing'])
+            ->whereIn('status', ['pending_withdraw', 'processing', 'gas_funding', 'withdrawing'])
             ->count();
     }
 
@@ -112,7 +114,7 @@ class WithdrawalTask extends BaseModel
         return (int)self::query()
             ->where('wallet_account_id', $walletAccountId)
             ->where('token_code', strtoupper($tokenCode))
-            ->whereIn('status', self::PROCESSABLE_STATUSES)
+            ->whereIn('status', array_merge(self::PROCESSABLE_STATUSES, ['processing']))
             ->count();
     }
 
@@ -138,6 +140,102 @@ class WithdrawalTask extends BaseModel
     public static function shouldCountRetry(string $status): bool
     {
         return in_array($status, self::RETRY_STATUSES, true);
+    }
+
+    public static function isClaimableStatus(string $status): bool
+    {
+        return in_array($status, self::CLAIMABLE_STATUSES, true);
+    }
+
+    public static function claimForProcessing(int $id, string $status, bool $manual): bool
+    {
+        if (!self::isClaimableStatus($status)) {
+            return true;
+        }
+
+        $query = self::query()
+            ->where('id', $id)
+            ->where('status', $status);
+        if (!$manual && self::shouldCountRetry($status)) {
+            $query->whereColumn('retry_count', '<', 'max_retry_count');
+        }
+
+        return $query->update([
+            'status' => 'processing',
+            'updated_at' => self::now(),
+        ]) > 0;
+    }
+
+    public static function restoreProcessingStatus(int $id, string $status): bool
+    {
+        if (!in_array($status, self::PROCESSABLE_STATUSES, true)) {
+            return false;
+        }
+
+        return self::query()
+            ->where('id', $id)
+            ->where('status', 'processing')
+            ->update([
+                'status' => $status,
+                'updated_at' => self::now(),
+            ]) > 0;
+    }
+
+    public static function hasEarlierBlockingTask(array $task): bool
+    {
+        $id = (int)($task['id'] ?? 0);
+        $networkCode = (string)($task['network_code'] ?? '');
+        $tokenCode = strtoupper((string)($task['token_code'] ?? ''));
+        if ($id <= 0 || $networkCode === '' || $tokenCode === '') {
+            return false;
+        }
+
+        return self::query()
+            ->where('network_code', $networkCode)
+            ->where('token_code', $tokenCode)
+            ->where('id', '<', $id)
+            ->where(function ($query) {
+                $query->whereIn('status', self::BLOCKING_STATUSES)
+                    ->orWhere(function ($subQuery) {
+                        $subQuery->whereIn('status', self::RETRY_STATUSES)
+                            ->whereColumn('retry_count', '<', 'max_retry_count');
+                    });
+            })
+            ->exists();
+    }
+
+    public static function acquireNetworkTokenLock(string $networkCode, string $tokenCode): bool
+    {
+        $row = self::query()
+            ->getConnection()
+            ->selectOne('SELECT GET_LOCK(?, 0) AS locked', [self::networkTokenLockName($networkCode, $tokenCode)]);
+        return (int)self::dbValue($row, 'locked') === 1;
+    }
+
+    public static function releaseNetworkTokenLock(string $networkCode, string $tokenCode): void
+    {
+        try {
+            self::query()
+                ->getConnection()
+                ->selectOne('SELECT RELEASE_LOCK(?) AS released', [self::networkTokenLockName($networkCode, $tokenCode)]);
+        } catch (\Throwable) {
+        }
+    }
+
+    private static function networkTokenLockName(string $networkCode, string $tokenCode): string
+    {
+        return 'hdupay:withdrawal:' . sha1(strtolower($networkCode) . ':' . strtoupper($tokenCode));
+    }
+
+    private static function dbValue(mixed $row, string $key): mixed
+    {
+        if (is_array($row)) {
+            return $row[$key] ?? null;
+        }
+        if (is_object($row)) {
+            return $row->{$key} ?? null;
+        }
+        return null;
     }
 
     public static function saveWithdrawConfirmation(

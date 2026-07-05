@@ -85,6 +85,7 @@ const withdrawConfig = reactive({ auto_withdraw_interval_seconds: 10 })
 const networkOptions = shortNetworkOptions
 const statusOptions = [
   { label: '待转出', value: 'pending_withdraw' },
+  { label: '处理中', value: 'processing' },
   { label: '补充 Gas 中', value: 'gas_funding' },
   { label: '转出中', value: 'withdrawing' },
   { label: '已转出', value: 'withdrawn' },
@@ -241,6 +242,7 @@ function renderActions(row: any) {
 function statusText(status: string) {
   const map: Record<string, string> = {
     pending_withdraw: '待转出',
+    processing: '处理中',
     gas_funding: '补充 Gas 中',
     withdrawing: '转出中',
     withdrawn: '已转出',
@@ -253,7 +255,7 @@ function statusText(status: string) {
 function statusType(status: string) {
   if (status === 'withdrawn') return 'success'
   if (status === 'withdraw_failed' || status === 'manual_required') return 'error'
-  if (status === 'gas_funding' || status === 'withdrawing') return 'warning'
+  if (status === 'processing' || status === 'gas_funding' || status === 'withdrawing') return 'warning'
   return 'info'
 }
 
