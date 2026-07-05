@@ -2,6 +2,7 @@
 
 namespace app\controller;
 
+use app\service\PublicUrlService;
 use support\Request;
 use Throwable;
 
@@ -15,6 +16,20 @@ abstract class BaseController
             return $json + $request->all();
         }
         return $request->all();
+    }
+
+    protected function publicBaseUrl(Request $request): string
+    {
+        $host = trim((string)($request->header('x-forwarded-host') ?: $request->header('host') ?: ''));
+        return (new PublicUrlService())->publicBaseUrl(
+            $host,
+            (string)($request->header('x-forwarded-proto') ?: ''),
+            [
+                (string)$request->header('x-forwarded-ssl'),
+                (string)$request->header('front-end-https'),
+                (string)$request->header('https'),
+            ]
+        );
     }
 
     protected function ok(mixed $data = [], string $msg = '成功')

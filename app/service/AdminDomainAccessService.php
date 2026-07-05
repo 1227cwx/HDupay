@@ -4,7 +4,6 @@ namespace app\service;
 
 use app\model\SystemSetting;
 use InvalidArgumentException;
-use Webman\Http\Request;
 
 class AdminDomainAccessService
 {
@@ -21,25 +20,25 @@ class AdminDomainAccessService
         return $this->normalizeDomain(SystemSetting::getValue(self::PUBLIC_BASE_URL_KEY, ''));
     }
 
-    public function isAdminAllowed(Request $request): bool
+    public function isAdminAllowed(string $requestHost): bool
     {
         $allowedDomain = $this->allowedDomain();
         if ($allowedDomain === '') {
             return true;
         }
 
-        $requestHost = $this->requestHost($request);
+        $requestHost = $this->normalizeDomain($requestHost);
         return $requestHost !== '' && hash_equals($allowedDomain, $requestHost);
     }
 
-    public function isPublicAllowed(Request $request): bool
+    public function isPublicAllowed(string $requestHost): bool
     {
         $allowedDomain = $this->allowedDomain();
         if ($allowedDomain === '') {
             return true;
         }
 
-        $requestHost = $this->requestHost($request);
+        $requestHost = $this->normalizeDomain($requestHost);
         if ($requestHost === '' || hash_equals($allowedDomain, $requestHost)) {
             return false;
         }
@@ -66,15 +65,6 @@ class AdminDomainAccessService
 
         SystemSetting::saveValue(self::SETTING_KEY, $domain);
         return $domain;
-    }
-
-    private function requestHost(Request $request): string
-    {
-        $host = trim((string)$request->header('host'));
-        if ($host === '') {
-            $host = trim((string)$request->header('x-forwarded-host'));
-        }
-        return $this->normalizeDomain($host);
     }
 
     private function normalizeDomain(string $domain): string

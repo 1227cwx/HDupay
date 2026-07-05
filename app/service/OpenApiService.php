@@ -10,7 +10,6 @@ use Hyperf\Guzzle\ClientFactory;
 use InvalidArgumentException;
 use Psr\Container\ContainerInterface;
 use RuntimeException;
-use support\Request;
 use Throwable;
 
 class OpenApiService
@@ -115,15 +114,15 @@ class OpenApiService
         return OpenApiClient::deleteById($id) > 0;
     }
 
-    public function networks(Request $request): array
+    public function networks(array $input, string $ip): array
     {
-        $this->authenticate($request);
+        $this->authenticate($input, $ip);
         return $this->networkPayload();
     }
 
-    public function createOrder(Request $request, array $input): array
+    public function createOrder(array $input, string $ip, string $baseUrl): array
     {
-        $client = $this->authenticate($request);
+        $client = $this->authenticate($input, $ip);
         $network = trim((string)($input['network_id'] ?? ($input['network'] ?? '')));
         $order = (new DepositService())->create([
             'network' => $network,
@@ -132,16 +131,16 @@ class OpenApiService
             'fiat_amount' => (string)($input['fiat_amount'] ?? ''),
             'return_url' => (string)($input['return_url'] ?? ''),
             'source' => 'api',
-            'source_ip' => $request->getRealIp(false),
+            'source_ip' => $ip,
             'api_client_id' => (int)$client['id'],
-            'base_url' => (new PublicUrlService())->publicBaseUrl($request),
+            'base_url' => $baseUrl,
         ]);
         return $this->orderPayload($order);
     }
 
-    public function orderStatus(Request $request, array $input): array
+    public function orderStatus(array $input, string $ip, string $baseUrl): array
     {
-        $client = $this->authenticate($request);
+        $client = $this->authenticate($input, $ip);
         $orderNo = trim((string)($input['order_no'] ?? ''));
         if ($orderNo === '') {
             throw new InvalidArgumentException('订单号不能为空');
@@ -150,7 +149,7 @@ class OpenApiService
         if (!$order || (int)($order['api_client_id'] ?? 0) !== (int)$client['id']) {
             throw new InvalidArgumentException('订单不存在');
         }
-        return (new DepositService())->publicStatus($orderNo, true, (new PublicUrlService())->publicBaseUrl($request));
+        return (new DepositService())->publicStatus($orderNo, true, $baseUrl);
     }
 
     public function sendCallbackForOrder(array $order): void
@@ -267,11 +266,10 @@ class OpenApiService
         }
     }
 
-    private function authenticate(Request $request): array
+    private function authenticate(array $input, string $ip): array
     {
-        $input = $this->requestInput($request);
-        $apiKey = trim((string)($request->header('x-api-key') ?: ($input['api_key'] ?? '')));
-        $apiSecret = trim((string)($request->header('x-api-secret') ?: ($input['api_secret'] ?? '')));
+        $apiKey = trim((string)($input['api_key'] ?? ''));
+        $apiSecret = trim((string)($input['api_secret'] ?? ''));
         if ($apiKey === '' || $apiSecret === '') {
             throw new InvalidArgumentException('缺少 API Key 或 API Key Secret');
         }
@@ -284,7 +282,6 @@ class OpenApiService
             throw new InvalidArgumentException('API Key Secret 不正确');
         }
 
-        $ip = $request->getRealIp(false);
         if (!$this->ipAllowed($ip, (string)($client['ip_whitelist'] ?? '0.0.0.0'))) {
             throw new InvalidArgumentException('当前 IP 不在白名单内');
         }
@@ -293,15 +290,6 @@ class OpenApiService
         return $client;
     }
 
-    private function requestInput(Request $request): array
-    {
-        $raw = $request->rawBody();
-        $json = $raw !== '' ? json_decode($raw, true) : null;
-        if (is_array($json)) {
-            return $json + $request->all();
-        }
-        return $request->all();
-    }
 
     private function networkPayload(): array
     {

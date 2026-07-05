@@ -4,27 +4,22 @@ namespace app\service;
 
 use app\model\SystemSetting;
 use InvalidArgumentException;
-use Webman\Http\Request;
 
 class PublicUrlService
 {
-    public function publicBaseUrl(?Request $request = null): string
+    public function publicBaseUrl(string $host = '', string $forwardedProto = '', array $httpsHeaders = []): string
     {
         $configured = $this->normalizeBaseUrl(SystemSetting::getValue('site_public_base_url', ''));
         if ($configured !== '') {
             return $configured;
         }
 
-        if (!$request) {
-            return '';
-        }
-
-        $host = trim((string)($request->header('x-forwarded-host') ?: $request->header('host') ?: ''));
+        $host = trim($host);
         if ($host === '') {
             return '';
         }
 
-        $proto = $this->requestScheme($request, $host);
+        $proto = $this->requestScheme($forwardedProto, $httpsHeaders, $host);
 
         return $proto . '://' . $host;
     }
@@ -64,18 +59,13 @@ class PublicUrlService
         return rtrim($url, '/');
     }
 
-    private function requestScheme(Request $request, string $host): string
+    private function requestScheme(string $forwardedProto, array $httpsHeaders, string $host): string
     {
-        $proto = trim((string)($request->header('x-forwarded-proto') ?: ''));
+        $proto = trim($forwardedProto);
         if ($proto !== '') {
             $proto = strtolower(explode(',', $proto)[0]);
         }
 
-        $httpsHeaders = [
-            (string)$request->header('x-forwarded-ssl'),
-            (string)$request->header('front-end-https'),
-            (string)$request->header('https'),
-        ];
         foreach ($httpsHeaders as $value) {
             if (in_array(strtolower(trim($value)), ['on', '1', 'https'], true)) {
                 return 'https';

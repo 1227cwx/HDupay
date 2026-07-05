@@ -3,7 +3,6 @@
 namespace app\controller;
 
 use app\service\DepositService;
-use app\service\PublicUrlService;
 use support\Request;
 use Throwable;
 
@@ -15,7 +14,7 @@ class DepositController extends BaseController
             $input = $this->input($request);
             $input['source'] = 'frontend';
             $input['source_ip'] = $request->getRealIp(false);
-            $input['base_url'] = (new PublicUrlService())->publicBaseUrl($request);
+            $input['base_url'] = $this->publicBaseUrl($request);
             return $this->ok((new DepositService())->create($input));
         } catch (Throwable $e) {
             return $this->fail($e);
@@ -56,7 +55,7 @@ class DepositController extends BaseController
             return $this->ok((new DepositService())->publicStatus(
                 (string)($input['order_no'] ?? ''),
                 !empty($input['allow_terminal']),
-                (new PublicUrlService())->publicBaseUrl($request)
+                $this->publicBaseUrl($request)
             ));
         } catch (Throwable $e) {
             return $this->fail($e);

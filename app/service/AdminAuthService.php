@@ -5,7 +5,6 @@ namespace app\service;
 use app\model\AdminLoginAttempt;
 use app\model\AdminUser;
 use InvalidArgumentException;
-use Webman\Http\Request;
 
 class AdminAuthService
 {
@@ -13,7 +12,7 @@ class AdminAuthService
     private const LOCK_SECONDS = 600;
     private const MAX_FAILURES = 5;
 
-    public function login(array $input, Request $request): array
+    public function login(array $input, string $ip, mixed $session): array
     {
 
         $username = trim((string)($input['username'] ?? ''));
@@ -22,7 +21,6 @@ class AdminAuthService
             throw new InvalidArgumentException('请输入管理员账号和密码');
         }
 
-        $ip = $request->getRealIp(false);
         $rateKey = strtolower($username);
         $this->assertNotLocked($rateKey, $ip);
 
@@ -34,7 +32,6 @@ class AdminAuthService
 
         AdminLoginAttempt::clearByUsernameIp($rateKey, $ip);
 
-        $session = $request->session();
         $session->set('admin_user_id', (int)$admin['id']);
         $session->set('admin_username', $admin['username']);
         AdminUser::markLogin((int)$admin['id']);
@@ -42,17 +39,15 @@ class AdminAuthService
         return $this->safeAdmin($admin);
     }
 
-    public function logout(Request $request): bool
+    public function logout(mixed $session): bool
     {
-        $session = $request->session();
         $session->delete('admin_user_id');
         $session->delete('admin_username');
         return true;
     }
 
-    public function current(Request $request): array
+    public function current(int $adminId): array
     {
-        $adminId = (int)$request->session()->get('admin_user_id', 0);
         if ($adminId <= 0) {
             return [];
         }
@@ -60,14 +55,14 @@ class AdminAuthService
         return $admin ? $this->safeAdmin($admin) : [];
     }
 
-    public function check(Request $request): bool
+    public function check(int $adminId): bool
     {
-        return $this->current($request) !== [];
+        return $this->current($adminId) !== [];
     }
 
-    public function updateProfile(array $input, Request $request): array
+    public function updateProfile(array $input, int $adminId, mixed $session): array
     {
-        $admin = $this->requireCurrentAdmin($request);
+        $admin = $this->requireCurrentAdmin($adminId);
         $adminId = (int)$admin['id'];
         $username = trim((string)($input['username'] ?? ''));
         $nickname = trim((string)($input['nickname'] ?? ''));
@@ -87,15 +82,15 @@ class AdminAuthService
         }
 
         AdminUser::updateProfile($adminId, $username, $nickname);
-        $request->session()->set('admin_username', $username);
+        $session->set('admin_username', $username);
 
         $updated = AdminUser::findActiveById($adminId);
         return $updated ? $this->safeAdmin($updated) : [];
     }
 
-    public function updatePassword(array $input, Request $request): bool
+    public function updatePassword(array $input, int $adminId): bool
     {
-        $admin = $this->requireCurrentAdmin($request);
+        $admin = $this->requireCurrentAdmin($adminId);
         $oldPassword = (string)($input['old_password'] ?? '');
         $newPassword = (string)($input['new_password'] ?? '');
         $confirmPassword = (string)($input['confirm_password'] ?? '');
@@ -120,9 +115,8 @@ class AdminAuthService
         return AdminUser::updatePasswordHash((int)$admin['id'], $hash);
     }
 
-    private function requireCurrentAdmin(Request $request): array
+    private function requireCurrentAdmin(int $adminId): array
     {
-        $adminId = (int)$request->session()->get('admin_user_id', 0);
         if ($adminId <= 0) {
             throw new InvalidArgumentException('请先登录后台');
         }

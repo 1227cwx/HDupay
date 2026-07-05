@@ -13,12 +13,12 @@ class AdminAuthMiddleware implements MiddlewareInterface
 {
     public function process(Request $request, callable $handler): Response
     {
-        if (!(new AdminDomainAccessService())->isAdminAllowed($request)) {
+        if (!(new AdminDomainAccessService())->isAdminAllowed($this->requestHost($request))) {
             return response('Not Found', 404);
         }
 
         try {
-            $loggedIn = (new AdminAuthService())->check($request);
+            $loggedIn = (new AdminAuthService())->check((int)$request->session()->get('admin_user_id', 0));
         } catch (Throwable) {
             return json(['code' => 1, 'msg' => '后台登录状态校验失败，请联系管理员', 'data' => null]);
         }
@@ -28,5 +28,14 @@ class AdminAuthMiddleware implements MiddlewareInterface
         }
 
         return $handler($request);
+    }
+
+    private function requestHost(Request $request): string
+    {
+        $host = trim((string)$request->header('host'));
+        if ($host === '') {
+            $host = trim((string)$request->header('x-forwarded-host'));
+        }
+        return $host;
     }
 }

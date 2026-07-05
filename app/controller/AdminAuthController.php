@@ -11,7 +11,7 @@ class AdminAuthController extends BaseController
     public function login(Request $request)
     {
         try {
-            return $this->ok((new AdminAuthService())->login($this->input($request), $request), '登录成功');
+            return $this->ok((new AdminAuthService())->login($this->input($request), $request->getRealIp(false), $request->session()), '登录成功');
         } catch (Throwable $e) {
             return $this->fail($e);
         }
@@ -20,7 +20,7 @@ class AdminAuthController extends BaseController
     public function logout(Request $request)
     {
         try {
-            return $this->ok((new AdminAuthService())->logout($request), '已退出登录');
+            return $this->ok((new AdminAuthService())->logout($request->session()), '已退出登录');
         } catch (Throwable $e) {
             return $this->fail($e);
         }
@@ -29,7 +29,7 @@ class AdminAuthController extends BaseController
     public function me(Request $request)
     {
         try {
-            $admin = (new AdminAuthService())->current($request);
+            $admin = (new AdminAuthService())->current((int)$request->session()->get('admin_user_id', 0));
             if (!$admin) {
                 return json(['code' => 401, 'msg' => '请先登录后台', 'data' => null]);
             }
@@ -42,7 +42,7 @@ class AdminAuthController extends BaseController
     public function updateProfile(Request $request)
     {
         try {
-            return $this->ok((new AdminAuthService())->updateProfile($this->input($request), $request), '管理员信息已保存');
+            return $this->ok((new AdminAuthService())->updateProfile($this->input($request), (int)$request->session()->get('admin_user_id', 0), $request->session()), '管理员信息已保存');
         } catch (Throwable $e) {
             return $this->fail($e);
         }
@@ -51,7 +51,7 @@ class AdminAuthController extends BaseController
     public function updatePassword(Request $request)
     {
         try {
-            return $this->ok((new AdminAuthService())->updatePassword($this->input($request), $request), '管理员密码已修改');
+            return $this->ok((new AdminAuthService())->updatePassword($this->input($request), (int)$request->session()->get('admin_user_id', 0)), '管理员密码已修改');
         } catch (Throwable $e) {
             return $this->fail($e);
         }

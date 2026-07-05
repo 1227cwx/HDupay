@@ -10,12 +10,11 @@ use Hyperf\Guzzle\ClientFactory;
 use InvalidArgumentException;
 use Psr\Container\ContainerInterface;
 use RuntimeException;
-use support\Request;
 use Throwable;
 
 class EasyPayService
 {
-    public function submit(Request $request, array $input): string
+    public function submit(array $input, string $ip, string $baseUrl): string
     {
         $params = $this->normalizeParams($input);
         $client = $this->clientByPid((string)($params['pid'] ?? ''));
@@ -30,11 +29,11 @@ class EasyPayService
 
         $this->validateSubmitParams($params, $client);
         $returnUrl = $this->normalizeOptionalReturnUrl((string)($params['return_url'] ?? ''));
-        OpenApiClient::updateLastUsed((int)$client['id'], $request->getRealIp(false));
+        OpenApiClient::updateLastUsed((int)$client['id'], $ip);
 
         $existing = EasyPayOrder::findByClientAndOutTradeNo((int)$client['id'], (string)$params['out_trade_no']);
         if ($existing) {
-            return $this->payUrl((string)$existing['epay_order_no'], (new PublicUrlService())->publicBaseUrl($request));
+            return $this->payUrl((string)$existing['epay_order_no'], $baseUrl);
         }
 
         $storedParams = $params;
@@ -56,7 +55,7 @@ class EasyPayService
             'notify_count' => 0,
         ]);
 
-        return $this->payUrl((string)$order['epay_order_no'], (new PublicUrlService())->publicBaseUrl($request));
+        return $this->payUrl((string)$order['epay_order_no'], $baseUrl);
     }
 
     public function publicDetail(string $epayOrderNo): array

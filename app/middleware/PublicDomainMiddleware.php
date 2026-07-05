@@ -11,10 +11,19 @@ class PublicDomainMiddleware implements MiddlewareInterface
 {
     public function process(Request $request, callable $handler): Response
     {
-        if (!(new AdminDomainAccessService())->isPublicAllowed($request)) {
+        if (!(new AdminDomainAccessService())->isPublicAllowed($this->requestHost($request))) {
             return response('Not Found', 404);
         }
 
         return $handler($request);
+    }
+
+    private function requestHost(Request $request): string
+    {
+        $host = trim((string)$request->header('host'));
+        if ($host === '') {
+            $host = trim((string)$request->header('x-forwarded-host'));
+        }
+        return $host;
     }
 }
