@@ -19,11 +19,6 @@ class WalletAssetService
     private const GAS_INTERVAL_KEY = 'wallet.gas_balance_sync_interval_minutes';
     private const GAS_LAST_SYNC_KEY = 'wallet.gas_balance_last_sync_at';
 
-    public function __construct()
-    {
-        $this->ensureCollectionRows();
-    }
-
     public function collectionWallets(): array
     {
         $accounts = $this->accountsWithNetworkMeta();
@@ -238,7 +233,6 @@ class WalletAssetService
 
     public function activeCollectionAddressForAccount(array $account): ?array
     {
-        $this->ensureCollectionRow($account);
         $active = WalletCollectionAddress::activeByAccountId((int)$account['id']);
         if ($active) {
             return $active;
@@ -271,14 +265,7 @@ class WalletAssetService
         }
     }
 
-    private function ensureCollectionRows(): void
-    {
-        foreach (WalletAccount::listPage([], 1, 100, 'id', 'asc')['items'] as $account) {
-            $this->ensureCollectionRow($account);
-        }
-    }
-
-    private function ensureCollectionRow(array $account): void
+    public function createSystemCollectionAddressForAccount(array $account): void
     {
         $account = (new EvmWalletService())->ensureAccountSystemAddresses($account);
         $accountId = (int)($account['id'] ?? 0);

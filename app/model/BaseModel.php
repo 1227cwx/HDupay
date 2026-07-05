@@ -31,6 +31,11 @@ abstract class BaseModel extends Model
         return static::findById((int)$id) ?? [];
     }
 
+    public static function transaction(callable $callback): mixed
+    {
+        return static::query()->getModel()->getConnection()->transaction($callback);
+    }
+
     public static function findById(int $id): ?array
     {
         $row = static::query()->where('id', $id)->first();
@@ -53,6 +58,15 @@ abstract class BaseModel extends Model
     public static function countAll(): int
     {
         return (int)static::query()->count();
+    }
+
+    public static function deleteAllRows(): int
+    {
+        $count = static::countAll();
+        if ($count > 0) {
+            static::query()->delete();
+        }
+        return $count;
     }
 
     public static function countByField(string $field, string|int $value): int

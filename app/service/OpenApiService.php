@@ -37,10 +37,11 @@ class OpenApiService
             throw new InvalidArgumentException('API 名称不能为空');
         }
 
-        $callbackUrl = trim((string)($input['callback_url'] ?? ($exists['callback_url'] ?? '')));
-        if ($callbackUrl !== '' && !filter_var($callbackUrl, FILTER_VALIDATE_URL)) {
-            throw new InvalidArgumentException('回调地址格式不正确');
-        }
+        $callbackUrl = (new UrlSecurityService())->normalizeOptional(
+            (string)($input['callback_url'] ?? ($exists['callback_url'] ?? '')),
+            '回调地址',
+            true
+        );
 
         $ipWhitelist = $this->normalizeIpWhitelist((string)($input['ip_whitelist'] ?? ($exists['ip_whitelist'] ?? '0.0.0.0')));
         $status = (string)($exists['status'] ?? 'enabled');
@@ -254,6 +255,7 @@ class OpenApiService
         try {
             $response = $this->httpClient()->post($callbackUrl, [
                 'http_errors' => false,
+                'allow_redirects' => false,
                 'timeout' => 10,
                 'connect_timeout' => 5,
                 'headers' => [

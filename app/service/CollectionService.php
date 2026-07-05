@@ -98,11 +98,13 @@ class CollectionService
 
     public function processPending(int $limit = 10): array
     {
+        $this->recoverStaleProcessingTasks();
         return $this->processTasks(CollectionTask::findAutoProcessable($limit, $this->autoCollectMaxRetryCount()));
     }
 
     public function processAll(): array
     {
+        $this->recoverStaleProcessingTasks();
         $results = [];
         foreach (CollectionTask::pendingIds() as $id) {
             $task = CollectionTask::findPendingById((int)$id);
@@ -120,7 +122,7 @@ class CollectionService
         if (!$task) {
             throw new RuntimeException('归集记录不存在');
         }
-        if (($task['status'] ?? '') !== 'collect_failed') {
+        if (!in_array((string)($task['status'] ?? ''), CollectionTask::RETRY_STATUSES, true)) {
             throw new RuntimeException('只有归集失败的记录才允许手动重新归集');
         }
         return $this->processWithFailureHandling($task, true, true);
@@ -402,64 +404,103 @@ class CollectionService
                 . ' ' . $symbol . '；同时 Gas 钱包或 Gas 私钥未配置，无法自动补充手续费'
             );
         }
-        $rpc = new EvmRpcService();
-        $privateKey = (new CryptoService())->decrypt($account['encrypted_gas_funder_private_key']);
-        $gasPrice = $rpc->gasPrice($networkCode);
-        $gas = '21000';
-        $transferCost = gmp_strval(gmp_mul(gmp_init($gasPrice, 10), gmp_init($gas, 10)), 10);
-        $shortage = gmp_sub(gmp_init($neededWei, 10), gmp_init($nativeBalance, 10));
-        $value = gmp_strval(gmp_add($shortage, gmp_init($transferCost, 10)), 10);
-        $totalGasFunderCost = gmp_strval(gmp_add(gmp_init($value, 10), gmp_init($transferCost, 10)), 10);
-        $gasFunderBalance = $rpc->getBalance($networkCode, $account['gas_funder_address']);
-        if (gmp_cmp(gmp_init($gasFunderBalance, 10), gmp_init($totalGasFunderCost, 10)) < 0) {
-            throw new RuntimeException(
-                'Gas 钱包余额不足，当前余额 '
-                . $this->formatWeiToEth($gasFunderBalance)
-                . ' ' . $symbol . '；收款子地址当前余额 '
-                . $this->formatWeiToEth($nativeBalance)
-                . ' ' . $symbol . '，归集需要至少 '
-                . $this->formatWeiToEth($neededWei)
-                . ' ' . $symbol . '，本次需要向子地址补充约 '
-                . $this->formatWeiToEth($value)
-                . ' ' . $symbol . '，并支付 Gas 钱包转账手续费约 '
-                . $this->formatWeiToEth($transferCost)
-                . ' ' . $symbol . '，合计需要约 '
-                . $this->formatWeiToEth($totalGasFunderCost)
-                . ' ' . $symbol
-            );
+        if (!WalletAccount::acquireGasWalletLock((string)$networkCode)) {
+            throw new RuntimeException('同网络 Gas 钱包正在处理交易，请稍后再试');
         }
-        $nonce = $rpc->getTransactionCount($networkCode, $account['gas_funder_address']);
-        $cfg = $rpc->runtimeConfig($networkCode);
-        $requiredConfirmations = (int)($task['required_confirmations'] ?? 0);
-        if ($requiredConfirmations <= 0) {
-            $requiredConfirmations = max(1, (int)($cfg['confirm_blocks'] ?? 1));
+
+        try {
+            $rpc = new EvmRpcService();
+            $privateKey = (new CryptoService())->decrypt($account['encrypted_gas_funder_private_key']);
+            $gasPrice = $rpc->gasPrice($networkCode);
+            $gas = '21000';
+            $transferCost = gmp_strval(gmp_mul(gmp_init($gasPrice, 10), gmp_init($gas, 10)), 10);
+            $shortage = gmp_sub(gmp_init($neededWei, 10), gmp_init($nativeBalance, 10));
+            $value = gmp_strval(gmp_add($shortage, gmp_init($transferCost, 10)), 10);
+            $totalGasFunderCost = gmp_strval(gmp_add(gmp_init($value, 10), gmp_init($transferCost, 10)), 10);
+            $gasFunderBalance = $rpc->getBalance($networkCode, $account['gas_funder_address']);
+            if (gmp_cmp(gmp_init($gasFunderBalance, 10), gmp_init($totalGasFunderCost, 10)) < 0) {
+                throw new RuntimeException(
+                    'Gas 钱包余额不足，当前余额 '
+                    . $this->formatWeiToEth($gasFunderBalance)
+                    . ' ' . $symbol . '；收款子地址当前余额 '
+                    . $this->formatWeiToEth($nativeBalance)
+                    . ' ' . $symbol . '，归集需要至少 '
+                    . $this->formatWeiToEth($neededWei)
+                    . ' ' . $symbol . '，本次需要向子地址补充约 '
+                    . $this->formatWeiToEth($value)
+                    . ' ' . $symbol . '，并支付 Gas 钱包转账手续费约 '
+                    . $this->formatWeiToEth($transferCost)
+                    . ' ' . $symbol . '，合计需要约 '
+                    . $this->formatWeiToEth($totalGasFunderCost)
+                    . ' ' . $symbol
+                );
+            }
+            $nonce = $rpc->getTransactionCount($networkCode, $account['gas_funder_address']);
+            $cfg = $rpc->runtimeConfig($networkCode);
+            $requiredConfirmations = (int)($task['required_confirmations'] ?? 0);
+            if ($requiredConfirmations <= 0) {
+                $requiredConfirmations = max(1, (int)($cfg['confirm_blocks'] ?? 1));
+            }
+            $raw = (new TransactionSignerService())->signLegacy([
+                'nonce' => (new EvmHexService())->decimalToQuantity($nonce),
+                'from' => $account['gas_funder_address'],
+                'to' => $task['from_address'],
+                'gas' => (new EvmHexService())->decimalToQuantity($gas),
+                'gasPrice' => (new EvmHexService())->decimalToQuantity($gasPrice),
+                'value' => (new EvmHexService())->decimalToQuantity($value),
+                'data' => '0x',
+                'chainId' => (int)$cfg['chain_id'],
+            ], $privateKey);
+            $txHash = $rpc->sendRawTransaction($networkCode, $raw);
+            GasFundingTransaction::createRecord([
+                'network_code' => $networkCode,
+                'business_type' => 'collection',
+                'business_id' => (int)$task['id'],
+                'from_address' => strtolower($account['gas_funder_address']),
+                'to_address' => strtolower($task['from_address']),
+                'amount_wei' => $value,
+                'tx_hash' => strtolower($txHash),
+                'status' => 'sent',
+                'required_confirmations' => $requiredConfirmations,
+                'current_confirmations' => 0,
+                'error_message' => '',
+            ]);
+            CollectionTask::mark((int)$task['id'], 'gas_funding', ['gas_funding_tx_hash' => strtolower($txHash)]);
+            return strtolower($txHash);
+        } finally {
+            WalletAccount::releaseGasWalletLock((string)$networkCode);
         }
-        $raw = (new TransactionSignerService())->signLegacy([
-            'nonce' => (new EvmHexService())->decimalToQuantity($nonce),
-            'from' => $account['gas_funder_address'],
-            'to' => $task['from_address'],
-            'gas' => (new EvmHexService())->decimalToQuantity($gas),
-            'gasPrice' => (new EvmHexService())->decimalToQuantity($gasPrice),
-            'value' => (new EvmHexService())->decimalToQuantity($value),
-            'data' => '0x',
-            'chainId' => (int)$cfg['chain_id'],
-        ], $privateKey);
-        $txHash = $rpc->sendRawTransaction($networkCode, $raw);
-        GasFundingTransaction::createRecord([
-            'network_code' => $networkCode,
-            'business_type' => 'collection',
-            'business_id' => (int)$task['id'],
-            'from_address' => strtolower($account['gas_funder_address']),
-            'to_address' => strtolower($task['from_address']),
-            'amount_wei' => $value,
-            'tx_hash' => strtolower($txHash),
-            'status' => 'sent',
-            'required_confirmations' => $requiredConfirmations,
-            'current_confirmations' => 0,
-            'error_message' => '',
-        ]);
-        CollectionTask::mark((int)$task['id'], 'gas_funding', ['gas_funding_tx_hash' => strtolower($txHash)]);
-        return strtolower($txHash);
+    }
+
+    private function recoverStaleProcessingTasks(): void
+    {
+        $maxRetryCount = $this->autoCollectMaxRetryCount();
+        foreach (CollectionTask::processingList() as $task) {
+            $updatedAt = strtotime((string)($task['updated_at'] ?? ''));
+            if (!$updatedAt) {
+                continue;
+            }
+            $address = PaymentAddress::findById((int)($task['address_id'] ?? 0));
+            $account = $address ? WalletAccount::findById((int)($address['wallet_account_id'] ?? 0)) : null;
+            $timeoutMinutes = min(1440, max(1, (int)($account['deposit_timeout_minutes'] ?? 10)));
+            if (time() - $updatedAt < $timeoutMinutes * 60) {
+                continue;
+            }
+
+            if (!empty($task['collect_tx_hash'])) {
+                CollectionTask::mark((int)$task['id'], 'collecting', ['error_message' => '']);
+                continue;
+            }
+            if (!empty($task['gas_funding_tx_hash'])) {
+                CollectionTask::mark((int)$task['id'], 'gas_funding', ['error_message' => '']);
+                continue;
+            }
+
+            CollectionTask::mark((int)$task['id'], 'manual_required', [
+                'retry_count' => $maxRetryCount,
+                'error_message' => '归集任务处理超时，未检测到链上交易哈希，请手动确认后重试',
+            ]);
+        }
     }
 
     private function formatWeiToEth(string $wei): string

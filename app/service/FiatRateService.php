@@ -38,12 +38,6 @@ class FiatRateService
 
     private const PAYMENT_TOKEN_CODES = ['USDC', 'USDT'];
 
-    public function __construct()
-    {
-        $this->ensureDefaultRows();
-        $this->ensureDefaultSettings();
-    }
-
     public function options(): array
     {
         return [
@@ -84,7 +78,6 @@ class FiatRateService
 
     public function rates(): array
     {
-        $this->ensureDefaultRows();
         $rows = FiatExchangeRate::allRates();
         $byKey = [];
         foreach ($rows as $row) {
@@ -165,7 +158,7 @@ class FiatRateService
         $this->assertFiatCurrency($fiatCurrency);
 
         if (!FiatExchangeRate::findByTokenCurrency($tokenCode, $fiatCurrency)) {
-            $this->ensureDefaultRows();
+            throw new RuntimeException('汇率数据不存在，请先导入最新数据库 SQL');
         }
         FiatExchangeRate::updateAutoUpdate($tokenCode, $fiatCurrency, $autoUpdate);
         return [
@@ -461,59 +454,6 @@ class FiatRateService
             'sync_interval_minutes' => $interval,
             'disable_cache' => $disableCache,
         ];
-    }
-
-    private function ensureDefaultRows(): void
-    {
-        foreach (self::RATE_TOKEN_OPTIONS as $token) {
-            foreach (self::FIAT_OPTIONS as $fiat) {
-                $tokenCode = $token['value'];
-                $currency = $fiat['value'];
-                $exists = FiatExchangeRate::findByTokenCurrency($tokenCode, $currency);
-                if ($exists) {
-                    $updates = [];
-                    if (($exists['coingecko_id'] ?? '') !== $token['coingecko_id']) {
-                        $updates['coingecko_id'] = $token['coingecko_id'];
-                    }
-                    if (($exists['provider'] ?? '') !== self::PROVIDER_COINGECKO) {
-                        $updates['provider'] = self::PROVIDER_COINGECKO;
-                    }
-                    if ($updates) {
-                        FiatExchangeRate::updateById((int)$exists['id'], $updates);
-                    }
-                    continue;
-                }
-                FiatExchangeRate::upsertRate($tokenCode, $currency, [
-                    'coingecko_id' => $token['coingecko_id'],
-                    'rate' => $this->fixedScale('0', self::RATE_SCALE),
-                    'auto_update' => 1,
-                    'provider' => self::PROVIDER_COINGECKO,
-                    'source_date' => null,
-                    'status' => 'pending',
-                    'error_message' => '',
-                    'last_refresh_at' => null,
-                ]);
-            }
-        }
-    }
-
-    private function ensureDefaultSettings(): void
-    {
-        if (SystemSetting::getValue('fiat_rate_provider', '') !== self::PROVIDER_COINGECKO) {
-            SystemSetting::saveValue('fiat_rate_provider', self::PROVIDER_COINGECKO);
-        }
-        if (SystemSetting::getValue('fiat_rate_proxy_mode', '') === '') {
-            SystemSetting::saveValue('fiat_rate_proxy_mode', 'direct');
-        }
-        if (SystemSetting::getValue('fiat_rate_proxy_id', '') === '') {
-            SystemSetting::saveValue('fiat_rate_proxy_id', '0');
-        }
-        if (SystemSetting::getValue('fiat_rate_sync_interval_minutes', '') === '') {
-            SystemSetting::saveValue('fiat_rate_sync_interval_minutes', (string)self::DEFAULT_SYNC_INTERVAL_MINUTES);
-        }
-        if (SystemSetting::getValue('fiat_rate_disable_cache', '') === '') {
-            SystemSetting::saveValue('fiat_rate_disable_cache', '0');
-        }
     }
 
     private function defaultQuoteCurrencies(): array

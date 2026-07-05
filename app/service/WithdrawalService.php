@@ -47,7 +47,6 @@ class WithdrawalService
 
     public function settings(): array
     {
-        $this->ensureDefaultSettings();
         $rows = WithdrawSetting::allList();
         foreach ($rows as &$row) {
             $row['network_name'] = config('chains.networks.' . $row['network_code'] . '.name') ?: $row['network_code'];
@@ -196,11 +195,13 @@ class WithdrawalService
 
     public function processPending(int $limit = 10): array
     {
+        $this->recoverStaleProcessingTasks();
         return $this->processTasks(WithdrawalTask::findAutoProcessable($limit));
     }
 
     public function processAll(): array
     {
+        $this->recoverStaleProcessingTasks();
         $results = [];
         foreach (WithdrawalTask::pendingIds() as $id) {
             $task = WithdrawalTask::findPendingById((int)$id);
@@ -474,65 +475,73 @@ class WithdrawalService
             );
         }
 
-        $rpc = new EvmRpcService();
-        $privateKey = (new CryptoService())->decrypt($account['encrypted_gas_funder_private_key']);
-        $gasPrice = $rpc->gasPrice($networkCode);
-        $gas = '21000';
-        $transferCost = gmp_strval(gmp_mul(gmp_init($gasPrice, 10), gmp_init($gas, 10)), 10);
-        $shortage = gmp_sub(gmp_init($neededWei, 10), gmp_init($nativeBalance, 10));
-        $value = gmp_strval(gmp_add($shortage, gmp_init($transferCost, 10)), 10);
-        $totalGasFunderCost = gmp_strval(gmp_add(gmp_init($value, 10), gmp_init($transferCost, 10)), 10);
-        $gasFunderBalance = $rpc->getBalance($networkCode, $account['gas_funder_address']);
-        if (gmp_cmp(gmp_init($gasFunderBalance, 10), gmp_init($totalGasFunderCost, 10)) < 0) {
-            throw new RuntimeException(
-                'Gas 钱包余额不足，当前余额 '
-                . $this->formatTokenAmount($gasFunderBalance, 18)
-                . ' ' . $symbol . '；归集钱包当前余额 '
-                . $this->formatTokenAmount($nativeBalance, 18)
-                . ' ' . $symbol . '，本次转出需要至少 '
-                . $this->formatTokenAmount($neededWei, 18)
-                . ' ' . $symbol . '，需要向归集钱包补充约 '
-                . $this->formatTokenAmount($value, 18)
-                . ' ' . $symbol . '，并支付 Gas 钱包转账手续费约 '
-                . $this->formatTokenAmount($transferCost, 18)
-                . ' ' . $symbol . '，合计需要约 '
-                . $this->formatTokenAmount($totalGasFunderCost, 18)
-                . ' ' . $symbol
-            );
+        if (!WalletAccount::acquireGasWalletLock($networkCode)) {
+            throw new RuntimeException('同网络 Gas 钱包正在处理交易，请稍后再试');
         }
 
-        $nonce = $rpc->getTransactionCount($networkCode, $account['gas_funder_address']);
-        $cfg = $rpc->runtimeConfig($networkCode);
-        $requiredConfirmations = (int)($task['required_confirmations'] ?? 0);
-        if ($requiredConfirmations <= 0) {
-            $requiredConfirmations = max(1, (int)($cfg['confirm_blocks'] ?? 1));
+        try {
+            $rpc = new EvmRpcService();
+            $privateKey = (new CryptoService())->decrypt($account['encrypted_gas_funder_private_key']);
+            $gasPrice = $rpc->gasPrice($networkCode);
+            $gas = '21000';
+            $transferCost = gmp_strval(gmp_mul(gmp_init($gasPrice, 10), gmp_init($gas, 10)), 10);
+            $shortage = gmp_sub(gmp_init($neededWei, 10), gmp_init($nativeBalance, 10));
+            $value = gmp_strval(gmp_add($shortage, gmp_init($transferCost, 10)), 10);
+            $totalGasFunderCost = gmp_strval(gmp_add(gmp_init($value, 10), gmp_init($transferCost, 10)), 10);
+            $gasFunderBalance = $rpc->getBalance($networkCode, $account['gas_funder_address']);
+            if (gmp_cmp(gmp_init($gasFunderBalance, 10), gmp_init($totalGasFunderCost, 10)) < 0) {
+                throw new RuntimeException(
+                    'Gas 钱包余额不足，当前余额 '
+                    . $this->formatTokenAmount($gasFunderBalance, 18)
+                    . ' ' . $symbol . '；归集钱包当前余额 '
+                    . $this->formatTokenAmount($nativeBalance, 18)
+                    . ' ' . $symbol . '，本次转出需要至少 '
+                    . $this->formatTokenAmount($neededWei, 18)
+                    . ' ' . $symbol . '，需要向归集钱包补充约 '
+                    . $this->formatTokenAmount($value, 18)
+                    . ' ' . $symbol . '，并支付 Gas 钱包转账手续费约 '
+                    . $this->formatTokenAmount($transferCost, 18)
+                    . ' ' . $symbol . '，合计需要约 '
+                    . $this->formatTokenAmount($totalGasFunderCost, 18)
+                    . ' ' . $symbol
+                );
+            }
+
+            $nonce = $rpc->getTransactionCount($networkCode, $account['gas_funder_address']);
+            $cfg = $rpc->runtimeConfig($networkCode);
+            $requiredConfirmations = (int)($task['required_confirmations'] ?? 0);
+            if ($requiredConfirmations <= 0) {
+                $requiredConfirmations = max(1, (int)($cfg['confirm_blocks'] ?? 1));
+            }
+            $raw = (new TransactionSignerService())->signLegacy([
+                'nonce' => (new EvmHexService())->decimalToQuantity($nonce),
+                'from' => $account['gas_funder_address'],
+                'to' => $task['from_address'],
+                'gas' => (new EvmHexService())->decimalToQuantity($gas),
+                'gasPrice' => (new EvmHexService())->decimalToQuantity($gasPrice),
+                'value' => (new EvmHexService())->decimalToQuantity($value),
+                'data' => '0x',
+                'chainId' => (int)$cfg['chain_id'],
+            ], $privateKey);
+            $txHash = $rpc->sendRawTransaction($networkCode, $raw);
+            GasFundingTransaction::createRecord([
+                'network_code' => $networkCode,
+                'business_type' => 'withdrawal',
+                'business_id' => (int)$task['id'],
+                'from_address' => strtolower($account['gas_funder_address']),
+                'to_address' => strtolower($task['from_address']),
+                'amount_wei' => $value,
+                'tx_hash' => strtolower($txHash),
+                'status' => 'sent',
+                'required_confirmations' => $requiredConfirmations,
+                'current_confirmations' => 0,
+                'error_message' => '',
+            ]);
+            WithdrawalTask::mark((int)$task['id'], 'gas_funding', ['gas_funding_tx_hash' => strtolower($txHash)]);
+            return strtolower($txHash);
+        } finally {
+            WalletAccount::releaseGasWalletLock($networkCode);
         }
-        $raw = (new TransactionSignerService())->signLegacy([
-            'nonce' => (new EvmHexService())->decimalToQuantity($nonce),
-            'from' => $account['gas_funder_address'],
-            'to' => $task['from_address'],
-            'gas' => (new EvmHexService())->decimalToQuantity($gas),
-            'gasPrice' => (new EvmHexService())->decimalToQuantity($gasPrice),
-            'value' => (new EvmHexService())->decimalToQuantity($value),
-            'data' => '0x',
-            'chainId' => (int)$cfg['chain_id'],
-        ], $privateKey);
-        $txHash = $rpc->sendRawTransaction($networkCode, $raw);
-        GasFundingTransaction::createRecord([
-            'network_code' => $networkCode,
-            'business_type' => 'withdrawal',
-            'business_id' => (int)$task['id'],
-            'from_address' => strtolower($account['gas_funder_address']),
-            'to_address' => strtolower($task['from_address']),
-            'amount_wei' => $value,
-            'tx_hash' => strtolower($txHash),
-            'status' => 'sent',
-            'required_confirmations' => $requiredConfirmations,
-            'current_confirmations' => 0,
-            'error_message' => '',
-        ]);
-        WithdrawalTask::mark((int)$task['id'], 'gas_funding', ['gas_funding_tx_hash' => strtolower($txHash)]);
-        return strtolower($txHash);
     }
 
     private function localAccount(int $walletAccountId): array
@@ -564,23 +573,32 @@ class WithdrawalService
         return $account;
     }
 
-    private function ensureDefaultSettings(): void
+    private function recoverStaleProcessingTasks(): void
     {
-        foreach (WalletAccount::listPage([], 1, 100, 'id', 'asc')['items'] as $account) {
-            foreach (self::PAYMENT_TOKEN_CODES as $tokenCode) {
-                if (WithdrawSetting::findByAccountToken((int)$account['id'], $tokenCode)) {
-                    continue;
-                }
-                WithdrawSetting::saveForAccountToken((int)$account['id'], $tokenCode, [
-                    'network_code' => (string)$account['network_code'],
-                    'enabled' => 0,
-                    'target_address' => '',
-                    'min_amount_int' => '0',
-                    'max_retry_count' => 3,
-                    'status' => 'disabled',
-                    'error_message' => '',
-                ]);
+        foreach (WithdrawalTask::processingList() as $task) {
+            $updatedAt = strtotime((string)($task['updated_at'] ?? ''));
+            if (!$updatedAt) {
+                continue;
             }
+            $account = WalletAccount::findById((int)($task['wallet_account_id'] ?? 0));
+            $timeoutMinutes = min(1440, max(1, (int)($account['deposit_timeout_minutes'] ?? 10)));
+            if (time() - $updatedAt < $timeoutMinutes * 60) {
+                continue;
+            }
+
+            if (!empty($task['withdraw_tx_hash'])) {
+                WithdrawalTask::mark((int)$task['id'], 'withdrawing', ['error_message' => '']);
+                continue;
+            }
+            if (!empty($task['gas_funding_tx_hash'])) {
+                WithdrawalTask::mark((int)$task['id'], 'gas_funding', ['error_message' => '']);
+                continue;
+            }
+
+            WithdrawalTask::mark((int)$task['id'], 'manual_required', [
+                'retry_count' => (int)($task['max_retry_count'] ?? 3),
+                'error_message' => '杞嚭浠诲姟澶勭悊瓒呮椂锛屾湭妫€娴嬪埌閾句笂浜ゆ槗鍝堝笇锛岃鎵嬪姩纭鍚庨噸璇?',
+            ]);
         }
     }
 

@@ -39,7 +39,6 @@ export default createRouter({
     { path: `${admin}/gas-wallets`, component: GasWallets },
     { path: `${admin}/addresses`, component: Addresses },
     { path: `${admin}/orders`, component: Orders },
-    { path: `${admin}/transactions`, redirect: `${admin}/orders` },
     { path: `${admin}/collections`, component: Collections },
     { path: `${admin}/withdraw-settings`, component: WithdrawSettings },
     { path: `${admin}/withdrawals`, component: Withdrawals },

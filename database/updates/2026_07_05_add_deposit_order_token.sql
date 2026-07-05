@@ -1,4 +1,4 @@
--- Add public query token for deposit orders.
+-- Add public query token hash for deposit orders.
 -- Target: MySQL 5.7+
 -- Safe to run repeatedly.
 
@@ -42,8 +42,8 @@ DELIMITER ;
 
 CALL `hdupay_add_column_if_missing`(
     'deposit_orders',
-    'order_token',
-    '`order_token` varchar(64) NOT NULL DEFAULT '''' AFTER `order_no`'
+    'order_token_hash',
+    '`order_token_hash` varchar(64) NOT NULL DEFAULT '''' AFTER `order_no`'
 );
 
 DROP PROCEDURE IF EXISTS `hdupay_add_column_if_missing`;

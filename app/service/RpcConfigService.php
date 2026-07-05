@@ -7,7 +7,6 @@ use app\model\NetworkToken;
 use app\model\RpcConfig;
 use app\model\RpcGroup;
 use app\model\RpcNetworkSetting;
-use app\model\Token;
 use InvalidArgumentException;
 use RuntimeException;
 
@@ -15,7 +14,6 @@ class RpcConfigService
 {
     public function list(): array
     {
-        $this->ensureDefaults();
         $proxyNames = $this->proxyNames();
         $groups = RpcGroup::allList();
         $groupNames = [];
@@ -158,10 +156,9 @@ class RpcConfigService
 
         $setting = RpcNetworkSetting::findByNetwork($networkCode);
         if (!$setting) {
-            RpcNetworkSetting::saveForNetwork($networkCode, array_merge($this->defaultNetworkSetting($networkCode), [
-                'active_group_id' => (int)$saved['id'],
-            ]));
-        } elseif ((int)($setting['active_group_id'] ?? 0) <= 0 || !empty($input['set_active'])) {
+            throw new RuntimeException('网络配置不存在，请先导入最新数据库 SQL');
+        }
+        if ((int)($setting['active_group_id'] ?? 0) <= 0 || !empty($input['set_active'])) {
             RpcNetworkSetting::updateById((int)$setting['id'], ['active_group_id' => (int)$saved['id']]);
         }
 
@@ -279,67 +276,6 @@ class RpcConfigService
     public function testGroup(int $id): array
     {
         return (new EvmRpcService())->testGroupWithSteps($id);
-    }
-
-    public function ensureDefaults(): void
-    {
-        $this->ensureTokenDefaults();
-        foreach (config('chains.networks') ?: [] as $networkCode => $cfg) {
-            $setting = RpcNetworkSetting::findByNetwork((string)$networkCode);
-            if (!$setting) {
-                $setting = RpcNetworkSetting::saveForNetwork((string)$networkCode, $this->defaultNetworkSetting((string)$networkCode));
-            }
-            $defaultTokens = $this->defaultNetworkTokens((string)$networkCode);
-            if (!empty($setting['contract_address'])) {
-                $defaultTokens['USDC']['contract'] = (string)$setting['contract_address'];
-            }
-            foreach ($defaultTokens as $tokenCode => $token) {
-                $contract = strtolower((string)($token['contract'] ?? ''));
-                if ($contract !== '') {
-                    $this->saveNetworkToken((string)$networkCode, (string)$tokenCode, $contract, false);
-                }
-            }
-            $group = RpcGroup::firstByNetwork((string)$networkCode);
-            if (!$group) {
-                $group = RpcGroup::createRecord([
-                    'network_code' => (string)$networkCode,
-                    'name' => '默认分组',
-                    'rotation_mode' => 'random',
-                    'single_attempts' => 2,
-                    'max_nodes' => 3,
-                ]);
-            }
-            if ((int)($setting['active_group_id'] ?? 0) <= 0) {
-                RpcNetworkSetting::updateById((int)$setting['id'], ['active_group_id' => (int)$group['id']]);
-            }
-        }
-    }
-
-    private function defaultNetworkSetting(string $networkCode): array
-    {
-        $cfg = config('chains.networks.' . $networkCode) ?: [];
-        return [
-            'contract_address' => strtolower((string)($cfg['usdc_contract'] ?? '')),
-            'decimals' => $this->tokenDecimals('USDC'),
-            'monitor_interval_seconds' => (int)($cfg['monitor_interval_seconds'] ?? 10),
-            'min_confirm_blocks' => (int)($cfg['min_confirm_blocks'] ?? ($cfg['confirm_blocks'] ?? 12)),
-            'confirm_blocks' => (int)($cfg['confirm_blocks'] ?? 12),
-            'large_amount_threshold' => (string)($cfg['large_amount_threshold'] ?? '100'),
-            'scan_step_blocks' => (int)($cfg['scan_step_blocks'] ?? 500),
-            'active_group_id' => 0,
-            'enabled' => 0,
-        ];
-    }
-
-    private function ensureTokenDefaults(): void
-    {
-        foreach (config('chains.tokens') ?: [] as $tokenCode => $cfg) {
-            Token::saveForCode((string)$tokenCode, [
-                'name' => (string)($cfg['name'] ?? $tokenCode),
-                'decimals' => $this->tokenDecimals((string)$tokenCode),
-                'status' => 'enabled',
-            ]);
-        }
     }
 
     private function defaultNetworkTokens(string $networkCode): array

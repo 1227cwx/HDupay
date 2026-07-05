@@ -3,6 +3,7 @@
 namespace app\controller;
 
 use app\service\DepositService;
+use app\service\EasyPayService;
 use support\Request;
 use Throwable;
 
@@ -43,6 +44,13 @@ class DepositController extends BaseController
     {
         try {
             $input = $this->input($request);
+            if (!empty($input['epay_order_no'])) {
+                return $this->ok((new EasyPayService())->publicStatusForEpay(
+                    (string)$input['epay_order_no'],
+                    !empty($input['allow_terminal']),
+                    $this->publicBaseUrl($request)
+                ));
+            }
             return $this->ok((new DepositService())->publicStatus(
                 (string)($input['order_no'] ?? ''),
                 (string)($input['order_token'] ?? ''),

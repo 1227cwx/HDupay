@@ -62,11 +62,9 @@ class EasyPayService
     {
         $order = $this->activeEasyPayOrder($epayOrderNo);
         $depositOrderNo = (string)($order['deposit_order_no'] ?? '');
-        $depositOrderToken = '';
         if ($depositOrderNo !== '') {
             $depositOrder = DepositOrder::findByOrderNo($depositOrderNo);
             if ($depositOrder) {
-                $depositOrderToken = (string)($depositOrder['order_token'] ?? '');
                 $status = (string)($depositOrder['status'] ?? '');
                 if (!in_array($status, ['waiting', 'confirming'], true)) {
                     throw new InvalidArgumentException($this->terminalAccessMessage($status));
@@ -81,9 +79,21 @@ class EasyPayService
             'money' => (string)$order['money'],
             'fiat_currency' => 'CNY',
             'deposit_order_no' => $depositOrderNo,
-            'deposit_order_token' => $depositOrderToken,
             'status' => (string)$order['status'],
         ];
+    }
+
+    public function publicStatusForEpay(string $epayOrderNo, bool $allowTerminal, string $baseUrl): array
+    {
+        $order = $this->activeEasyPayOrder($epayOrderNo);
+        $depositOrderNo = (string)($order['deposit_order_no'] ?? '');
+        if ($depositOrderNo === '') {
+            throw new InvalidArgumentException('易支付订单尚未创建收款地址');
+        }
+
+        $status = (new DepositService())->publicStatus($depositOrderNo, '', $allowTerminal, $baseUrl, false);
+        $status['epay_order_no'] = (string)$order['epay_order_no'];
+        return $status;
     }
 
     public function existingDepositOrderForCreate(string $epayOrderNo): ?array
@@ -178,6 +188,7 @@ class EasyPayService
         try {
             $response = $this->httpClient()->post($notifyUrl, [
                 'http_errors' => false,
+                'allow_redirects' => false,
                 'timeout' => 10,
                 'connect_timeout' => 5,
                 'form_params' => $params,
@@ -342,7 +353,7 @@ class EasyPayService
             throw new InvalidArgumentException('易支付金额格式不正确');
         }
         if ($this->clientCallbackUrl($client) === '') {
-            $this->validateUrl((string)$params['notify_url'], '异步回调地址');
+            (new UrlSecurityService())->normalizeRequired((string)$params['notify_url'], '异步回调地址');
         }
         if (strlen((string)$params['out_trade_no']) > 128) {
             throw new InvalidArgumentException('商户订单号过长');
@@ -352,7 +363,7 @@ class EasyPayService
     private function effectiveNotifyUrlForSubmit(array $params, array $client): string
     {
         $callbackUrl = $this->clientCallbackUrl($client);
-        return $callbackUrl !== '' ? $callbackUrl : trim((string)($params['notify_url'] ?? ''));
+        return $callbackUrl !== '' ? $callbackUrl : (new UrlSecurityService())->normalizeRequired((string)($params['notify_url'] ?? ''), '异步回调地址');
     }
 
     private function effectiveNotifyUrlForNotify(array $epayOrder, array $client): string
@@ -375,31 +386,9 @@ class EasyPayService
         return (float)$money > 0;
     }
 
-    private function validateUrl(string $url, string $label): void
-    {
-        if (strlen($url) > 1000 || preg_match('/[\x00-\x1F\x7F]/', $url)) {
-            throw new InvalidArgumentException($label . '格式不正确');
-        }
-        $scheme = strtolower((string)parse_url($url, PHP_URL_SCHEME));
-        if (!in_array($scheme, ['http', 'https'], true) || !filter_var($url, FILTER_VALIDATE_URL)) {
-            throw new InvalidArgumentException($label . '必须是 http 或 https 地址');
-        }
-    }
-
     private function normalizeOptionalReturnUrl(string $url): string
     {
-        $url = trim($url);
-        if ($url === '') {
-            return '';
-        }
-        if (strlen($url) > 1000 || preg_match('/[\x00-\x1F\x7F]/', $url)) {
-            return '';
-        }
-        $scheme = strtolower((string)parse_url($url, PHP_URL_SCHEME));
-        if (!in_array($scheme, ['http', 'https'], true) || !filter_var($url, FILTER_VALIDATE_URL)) {
-            return '';
-        }
-        return $url;
+        return (new UrlSecurityService())->normalizeOptional($url, '同步跳转地址');
     }
 
     private function normalizeParams(array $input): array

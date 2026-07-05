@@ -106,4 +106,38 @@ class WalletAccount extends BaseModel
     {
         return (string)(self::query()->whereNotNull('gas_last_balance_sync_at')->max('gas_last_balance_sync_at') ?: '');
     }
+
+    public static function acquireGasWalletLock(string $networkCode): bool
+    {
+        $row = self::query()
+            ->getConnection()
+            ->selectOne('SELECT GET_LOCK(?, 0) AS locked', [self::gasWalletLockName($networkCode)]);
+        return (int)self::dbValue($row, 'locked') === 1;
+    }
+
+    public static function releaseGasWalletLock(string $networkCode): void
+    {
+        try {
+            self::query()
+                ->getConnection()
+                ->selectOne('SELECT RELEASE_LOCK(?) AS released', [self::gasWalletLockName($networkCode)]);
+        } catch (\Throwable) {
+        }
+    }
+
+    private static function gasWalletLockName(string $networkCode): string
+    {
+        return 'hdupay:gas-wallet:' . sha1(strtolower($networkCode));
+    }
+
+    private static function dbValue(mixed $row, string $key): mixed
+    {
+        if (is_array($row)) {
+            return $row[$key] ?? null;
+        }
+        if (is_object($row)) {
+            return $row->{$key} ?? null;
+        }
+        return null;
+    }
 }

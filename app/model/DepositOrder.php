@@ -8,7 +8,7 @@ class DepositOrder extends BaseModel
     protected $primaryKey = 'id';
     protected static array $fields = [
         'order_no',
-        'order_token',
+        'order_token_hash',
         'user_id',
         'source',
         'source_ip',

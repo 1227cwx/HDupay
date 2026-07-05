@@ -39,7 +39,6 @@ Route::group('/hdupay', function () {
     Route::get('/gas-wallets', [IndexController::class, 'index']);
     Route::get('/addresses', [IndexController::class, 'index']);
     Route::get('/orders', [IndexController::class, 'index']);
-    Route::get('/transactions', [IndexController::class, 'index']);
     Route::get('/collections', [IndexController::class, 'index']);
     Route::get('/withdraw-settings', [IndexController::class, 'index']);
     Route::get('/withdrawals', [IndexController::class, 'index']);

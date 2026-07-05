@@ -321,10 +321,11 @@ async function loadInit() {
 async function create() {
   creating.value = true
   try {
+    const currentEpayOrderNo = epayOrderNo.value
     const payload = {
       ...form,
-      epay_order_no: epayOrderNo.value || undefined,
-      fallback_return_url: epayOrderNo.value ? (fallbackReturnUrl.value || undefined) : undefined
+      epay_order_no: currentEpayOrderNo || undefined,
+      fallback_return_url: currentEpayOrderNo ? (fallbackReturnUrl.value || undefined) : undefined
     }
     const data: any = await api.post('/api/deposit/create', payload)
     setPayment(data)
@@ -334,7 +335,12 @@ async function create() {
     closePageAttempted.value = false
     accessError.value = ''
     message.success(text.created)
-    await router.replace({ path: '/pay', query: { order_no: data.order_no, order_token: data.order_token } })
+    if (data.order_token) {
+      await router.replace({ path: '/pay', query: { order_no: data.order_no, order_token: data.order_token } })
+    } else if (currentEpayOrderNo) {
+      epayOrderNo.value = currentEpayOrderNo
+      await router.replace({ path: '/pay', query: { epay_order: currentEpayOrderNo } })
+    }
     startPolling()
   } catch (e: any) {
     message.error(e.message)
@@ -355,7 +361,9 @@ async function loadEasyPayOrder(orderNo: string) {
     accessError.value = ''
     if (data.deposit_order_no) {
       loadingOrder.value = false
-      await loadPaymentOrder(String(data.deposit_order_no), false, String(data.deposit_order_token || ''))
+      await loadEpayPaymentStatus(epayOrderNo.value, false)
+    } else {
+      await loadInit()
     }
   } catch (e: any) {
     epayInfo.value = {}
@@ -388,6 +396,27 @@ async function loadPaymentOrder(orderNo: string, allowTerminal = false, orderTok
   }
 }
 
+async function loadEpayPaymentStatus(orderNo: string, allowTerminal = false) {
+  loadingOrder.value = true
+  try {
+    const data: any = await api.post('/api/deposit/status', { epay_order_no: orderNo, allow_terminal: allowTerminal })
+    setPayment(data)
+    epayOrderNo.value = String(data.epay_order_no || orderNo)
+    accessError.value = ''
+    if (data.status === 'success') {
+      handleSuccess()
+    } else if (['waiting', 'confirming'].includes(data.status)) {
+      startPolling()
+    }
+  } catch (e: any) {
+    payment.value = {}
+    accessError.value = e.message || text.loadFailed
+    stopPolling()
+  } finally {
+    loadingOrder.value = false
+  }
+}
+
 function startPolling() {
   stopPolling()
   refreshTimer.value = window.setInterval(loadStatus, 1000)
@@ -403,7 +432,10 @@ function stopPolling() {
 async function loadStatus() {
   if (!payment.value.order_no || successHandled.value) return
   try {
-    const data: any = await api.post('/api/deposit/status', { order_no: payment.value.order_no, order_token: currentOrderToken(), allow_terminal: true })
+    const payload = epayOrderNo.value
+      ? { epay_order_no: epayOrderNo.value, allow_terminal: true }
+      : { order_no: payment.value.order_no, order_token: currentOrderToken(), allow_terminal: true }
+    const data: any = await api.post('/api/deposit/status', payload)
     setPayment(data)
     if (data.status === 'success') {
       handleSuccess()
@@ -420,6 +452,7 @@ async function loadStatus() {
 
 function setPayment(data: any) {
   payment.value = data || {}
+  if (data?.epay_order_no) epayOrderNo.value = String(data.epay_order_no)
   progress.value = Number(data?.progress || 0)
 }
 
@@ -438,7 +471,7 @@ async function handleSuccess() {
   stopPolling()
   progress.value = 100
   successRedirectSeconds.value = 5
-  if (route.path === '/pay' && route.query.order_no) {
+  if (route.path === '/pay' && (route.query.order_no || route.query.epay_order)) {
     await router.replace('/pay')
   }
 }
@@ -503,6 +536,9 @@ function backToPay() {
   payment.value = {}
   accessError.value = ''
   closePageAttempted.value = false
+  if (networkOptions.value.length === 0) {
+    loadInit()
+  }
   router.replace('/pay')
 }
 
@@ -524,7 +560,6 @@ function formatDuration(seconds: number) {
 
 onMounted(async () => {
   try {
-    await loadInit()
     const orderNo = queryValue(route.query.order_no)
     const orderToken = queryValue(route.query.order_token)
     const easyPayOrderNo = queryValue(route.query.epay_order)
@@ -532,6 +567,8 @@ onMounted(async () => {
       await loadPaymentOrder(orderNo, false, orderToken)
     } else if (easyPayOrderNo) {
       await loadEasyPayOrder(easyPayOrderNo)
+    } else {
+      await loadInit()
     }
   } finally {
     pageInitializing.value = false

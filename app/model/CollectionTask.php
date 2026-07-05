@@ -94,6 +94,16 @@ class CollectionTask extends BaseModel
         return $row ? $row->toArray() : null;
     }
 
+    public static function processingList(int $limit = 100): array
+    {
+        return self::query()
+            ->where('status', 'processing')
+            ->orderBy('id')
+            ->limit($limit)
+            ->get()
+            ->toArray();
+    }
+
     public static function pendingIds(): array
     {
         return self::query()

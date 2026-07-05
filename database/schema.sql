@@ -196,7 +196,7 @@ CREATE TABLE IF NOT EXISTS `payment_addresses` (
 CREATE TABLE IF NOT EXISTS `deposit_orders` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `order_no` varchar(64) NOT NULL,
-  `order_token` varchar(64) NOT NULL DEFAULT '',
+  `order_token_hash` varchar(64) NOT NULL DEFAULT '',
   `user_id` bigint unsigned NOT NULL DEFAULT 0,
   `source` varchar(32) NOT NULL DEFAULT 'frontend',
   `source_ip` varchar(64) NOT NULL DEFAULT '',
@@ -238,21 +238,6 @@ CREATE TABLE IF NOT EXISTS `deposit_orders` (
   KEY `idx_waiting_token_block` (`network_code`,`token_code`,`status`,`listen_from_block`),
   KEY `idx_waiting_token_scan` (`network_code`,`token_code`,`status`,`listen_scanned_block`),
   KEY `idx_tx` (`network_code`,`tx_hash`,`tx_log_index`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
-CREATE TABLE IF NOT EXISTS `monitor_cursors` (
-  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
-  `network_code` varchar(64) NOT NULL,
-  `token_code` varchar(64) NOT NULL,
-  `contract_address` varchar(128) NOT NULL,
-  `last_scanned_block` bigint unsigned NOT NULL DEFAULT 0,
-  `confirm_blocks` int unsigned NOT NULL DEFAULT 12,
-  `scan_step_blocks` int unsigned NOT NULL DEFAULT 500,
-  `status` varchar(32) NOT NULL DEFAULT 'enabled',
-  `created_at` datetime NOT NULL,
-  `updated_at` datetime NOT NULL,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uniq_cursor` (`network_code`,`token_code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 CREATE TABLE IF NOT EXISTS `collection_tasks` (

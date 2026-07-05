@@ -67,7 +67,7 @@ class DepositService
         $returnUrl = $this->normalizeReturnUrl((string)($input['return_url'] ?? ''));
         $baseUrl = trim((string)($input['base_url'] ?? ''));
 
-        return DepositOrder::query()->getModel()->getConnection()->transaction(function () use (
+        return DepositOrder::transaction(function () use (
             $networkCode,
             $tokenCode,
             $source,
@@ -90,7 +90,7 @@ class DepositService
 
             $record = [
                 'order_no' => $orderNo,
-                'order_token' => $orderToken,
+                'order_token_hash' => $this->makeOrderTokenHash($orderToken),
                 'user_id' => (int)($input['user_id'] ?? 0),
                 'source' => $source,
                 'source_ip' => $sourceIp,
@@ -122,7 +122,7 @@ class DepositService
                 (new EasyPayService())->attachDepositOrder($epayOrderNo, $orderNo);
             }
 
-            return $this->orderPayload($created ?: $record, $timeoutMinutes, $baseUrl);
+            return $this->orderPayload(array_merge($created ?: $record, ['order_token' => $orderToken]), $timeoutMinutes, $baseUrl);
         });
     }
 
@@ -221,7 +221,6 @@ class DepositService
 
         return [
             'order_no' => $orderNo,
-            'order_token' => (string)($order['order_token'] ?? ''),
             'status' => $status,
             'progress' => $progress,
             'network_id' => (string)$order['network_code'],
@@ -426,18 +425,7 @@ class DepositService
 
     private function normalizeReturnUrl(string $url): string
     {
-        $url = trim($url);
-        if ($url === '') {
-            return '';
-        }
-        if (strlen($url) > 1000 || preg_match('/[\x00-\x1F\x7F]/', $url)) {
-            throw new InvalidArgumentException('同步跳转地址格式不正确');
-        }
-        $scheme = strtolower((string)parse_url($url, PHP_URL_SCHEME));
-        if (!in_array($scheme, ['http', 'https'], true) || !filter_var($url, FILTER_VALIDATE_URL)) {
-            throw new InvalidArgumentException('同步跳转地址必须是 http 或 https 地址');
-        }
-        return $url;
+        return (new UrlSecurityService())->normalizeOptional($url, '同步跳转地址', true);
     }
 
     private function payUrl(string $orderNo, string $baseUrl = '', string $orderToken = ''): string
@@ -460,11 +448,16 @@ class DepositService
         return bin2hex(random_bytes(24));
     }
 
+    private function makeOrderTokenHash(string $orderToken): string
+    {
+        return hash('sha256', $orderToken);
+    }
+
     private function assertOrderToken(array $order, string $orderToken): void
     {
-        $expected = (string)($order['order_token'] ?? '');
+        $expected = (string)($order['order_token_hash'] ?? '');
         $orderToken = trim($orderToken);
-        if ($expected === '' || $orderToken === '' || !hash_equals($expected, $orderToken)) {
+        if ($expected === '' || $orderToken === '' || !hash_equals($expected, $this->makeOrderTokenHash($orderToken))) {
             throw new InvalidArgumentException('订单访问凭证无效');
         }
     }

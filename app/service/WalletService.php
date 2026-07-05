@@ -9,7 +9,6 @@ use app\model\DepositOrder;
 use app\model\EasyPayOrder;
 use app\model\FiatExchangeRate;
 use app\model\GasFundingTransaction;
-use app\model\MonitorCursor;
 use app\model\OpenApiClient;
 use app\model\OpenApiCallbackLog;
 use app\model\PaymentAddress;
@@ -25,7 +24,11 @@ class WalletService
 {
     public function initialize(array $input): array
     {
-        return (new EvmWalletService())->initializeWallet((string)($input['name'] ?? 'default'), $input['mnemonic'] ?? null);
+        $result = (new EvmWalletService())->initializeWallet((string)($input['name'] ?? 'default'), $input['mnemonic'] ?? null);
+        foreach (WalletAccount::listPage([], 1, 100, 'id', 'asc')['items'] as $account) {
+            $this->createAccountRelatedRows($account);
+        }
+        return $result;
     }
 
     public function masters(): array
@@ -204,7 +207,7 @@ class WalletService
         $masterId = (int)($input['wallet_master_id'] ?? 0);
         (new EvmWalletService())->verifyRootWalletMnemonic($masterId, (string)($input['mnemonic'] ?? ''));
 
-        return WalletMaster::query()->getModel()->getConnection()->transaction(function () use ($masterId) {
+        return WalletMaster::transaction(function () use ($masterId) {
             $deleted = [
                 'wallet_master_id' => $masterId,
                 'deleted_callback_logs' => $this->deleteAllRows(OpenApiCallbackLog::class),
@@ -216,7 +219,6 @@ class WalletService
                 'deleted_payment_addresses' => $this->deleteAllRows(PaymentAddress::class),
                 'deleted_collection_wallets' => $this->deleteAllRows(WalletCollectionAddress::class),
                 'deleted_withdraw_settings' => $this->deleteAllRows(WithdrawSetting::class),
-                'deleted_monitor_cursors' => $this->deleteAllRows(MonitorCursor::class),
                 'deleted_open_api_clients' => $this->deleteAllRows(OpenApiClient::class),
                 'deleted_fiat_exchange_rates' => $this->deleteAllRows(FiatExchangeRate::class),
                 'deleted_admin_login_attempts' => $this->deleteAllRows(AdminLoginAttempt::class),
@@ -246,8 +248,7 @@ class WalletService
         }
 
         $account = (new EvmWalletService())->createNetworkAccount($master, $networkCode);
-        (new WalletAssetService())->activeCollectionAddressForAccount($account);
-        (new RpcConfigService())->ensureDefaults();
+        $this->createAccountRelatedRows($account);
         return $this->sanitizeAccount($account);
     }
 
@@ -392,11 +393,26 @@ class WalletService
 
     private function deleteAllRows(string $modelClass): int
     {
-        $count = (int)$modelClass::query()->count();
-        if ($count > 0) {
-            $modelClass::query()->delete();
+        return $modelClass::deleteAllRows();
+    }
+
+    private function createAccountRelatedRows(array $account): void
+    {
+        (new WalletAssetService())->createSystemCollectionAddressForAccount($account);
+        foreach (['USDC', 'USDT'] as $tokenCode) {
+            if (WithdrawSetting::findByAccountToken((int)$account['id'], $tokenCode)) {
+                continue;
+            }
+            WithdrawSetting::saveForAccountToken((int)$account['id'], $tokenCode, [
+                'network_code' => (string)$account['network_code'],
+                'enabled' => 0,
+                'target_address' => '',
+                'min_amount_int' => '0',
+                'max_retry_count' => 3,
+                'status' => 'disabled',
+                'error_message' => '',
+            ]);
         }
-        return $count;
     }
 
     private function groupStats(array $rows): array

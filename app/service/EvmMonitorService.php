@@ -28,13 +28,13 @@ class EvmMonitorService
 
     public function runOnce(string $networkCode): array
     {
+        $expired = $this->freezeExpiredOrders($networkCode);
         $rpc = new EvmRpcService();
         $cfg = $rpc->runtimeConfig($networkCode);
         if (empty($cfg['enabled'])) {
-            return ['network' => $networkCode, 'skipped' => '监听未启用', 'expired_frozen' => 0];
+            return ['network' => $networkCode, 'skipped' => '监听未启用', 'expired_frozen' => $expired];
         }
 
-        $expired = $this->freezeExpiredOrders($networkCode);
         $waitingCount = DepositOrder::waitingCount($networkCode);
         $confirmingCount = DepositOrder::confirmingCount($networkCode);
         if ($waitingCount <= 0 && $confirmingCount <= 0) {
@@ -42,10 +42,10 @@ class EvmMonitorService
         }
 
         $latest = $rpc->getBlockNumber($networkCode);
-        RpcNetworkSetting::markMonitorAt($networkCode);
         $confirmed = $this->updateConfirmingOrders($networkCode, $latest);
         $waitingCount = DepositOrder::waitingCount($networkCode);
         if ($waitingCount <= 0) {
+            RpcNetworkSetting::markMonitorAt($networkCode);
             return ['network' => $networkCode, 'skipped' => '当前网络没有待监听订单', 'expired_frozen' => $expired, 'confirmed' => $confirmed];
         }
 
@@ -54,6 +54,7 @@ class EvmMonitorService
             DepositOrder::waitingTokenCodes($networkCode)
         )));
         if (!$tokenCodes) {
+            RpcNetworkSetting::markMonitorAt($networkCode);
             return ['network' => $networkCode, 'skipped' => '当前网络没有待监听代币', 'expired_frozen' => $expired, 'confirmed' => $confirmed];
         }
 
@@ -66,6 +67,7 @@ class EvmMonitorService
             'confirmed' => $confirmed,
             'tokens' => [],
         ];
+        $hasTokenError = false;
         foreach ($tokenCodes as $tokenCode) {
             try {
                 $tokenResult = $this->scanToken($rpc, $networkCode, $tokenCode, $latest, $cfg);
@@ -73,6 +75,7 @@ class EvmMonitorService
                 $summary['matched'] += (int)($tokenResult['matched'] ?? 0);
                 $summary['tokens'][$tokenCode] = $tokenResult;
             } catch (Throwable $e) {
+                $hasTokenError = true;
                 $summary['tokens'][$tokenCode] = ['ok' => false, 'error' => $e->getMessage()];
                 Log::error('代币监听失败', [
                     'network' => $networkCode,
@@ -85,6 +88,9 @@ class EvmMonitorService
             $summary['expired_frozen'] += $this->freezeExpiredOrders($networkCode);
         } else {
             $summary['cursor_lag'] = true;
+        }
+        if (!$hasTokenError) {
+            RpcNetworkSetting::markMonitorAt($networkCode);
         }
         return $summary;
     }

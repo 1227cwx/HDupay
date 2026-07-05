@@ -13,8 +13,6 @@ class DepositNetworkAvailabilityService
 {
     public function options(): array
     {
-        (new RpcConfigService())->ensureDefaults();
-
         $options = [];
         foreach (WalletAccount::activeList() as $account) {
             $networkCode = (string)$account['network_code'];
