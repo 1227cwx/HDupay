@@ -45,7 +45,7 @@ class EvmWalletService
         $master = WalletMaster::createRecord([
             'name' => $name ?: 'default',
             'mnemonic_fingerprint' => substr(hash('sha256', $mnemonic), 0, 32),
-            'encrypted_seed_or_xprv' => $crypto->encrypt($seedHex),
+            'encrypted_seed' => $crypto->encrypt($seedHex),
             'status' => 'active',
         ]);
 
@@ -80,7 +80,7 @@ class EvmWalletService
             throw new RuntimeException('该网络账户已经存在，不能重复添加');
         }
 
-        $seedHex = (new CryptoService())->decrypt((string)($master['encrypted_seed_or_xprv'] ?? ''));
+        $seedHex = (new CryptoService())->decrypt((string)($master['encrypted_seed'] ?? ''));
         return WalletAccount::createRecord($this->networkAccountPayload(
             $master,
             $networkCode,
@@ -107,7 +107,7 @@ class EvmWalletService
             'network_code' => $networkCode,
             'derivation_path' => $accountPath,
             'xpub' => $this->deriveAccountPublicDescriptor($seedHex, $accountPath),
-            'encrypted_xprv' => $crypto->encrypt($accountXprv),
+            'encrypted_account_xprv' => $crypto->encrypt($accountXprv),
             'next_index' => 0,
             'deposit_timeout_minutes' => 10,
             'collection_type' => 'local',
@@ -208,7 +208,7 @@ class EvmWalletService
 
     private function accountPrivateNode(array $account): array
     {
-        $encrypted = (string)($account['encrypted_xprv'] ?? '');
+        $encrypted = (string)($account['encrypted_account_xprv'] ?? '');
         if ($encrypted === '') {
             throw new RuntimeException('网络账户私钥未配置');
         }
@@ -301,7 +301,7 @@ class EvmWalletService
         }
 
         $seedHex = $this->mnemonicToSeedHex($mnemonic);
-        $savedSeedHex = (new CryptoService())->decrypt($master['encrypted_seed_or_xprv']);
+        $savedSeedHex = (new CryptoService())->decrypt($master['encrypted_seed']);
         if (!hash_equals($savedSeedHex, $seedHex)) {
             throw new InvalidArgumentException('助记词验证失败');
         }
@@ -310,20 +310,6 @@ class EvmWalletService
             'master' => $master,
             'seed_hex' => $seedHex,
             'fingerprint' => $fingerprint,
-        ];
-    }
-
-    public function deriveAddressFromSeed(string $seedHex, string $path): array
-    {
-        $node = $this->derivePrivateNode($seedHex, $path);
-        $util = new Util();
-        $publicKey = $util->privateKeyToPublicKey($node['private_key']);
-        $address = $util->publicKeyToAddress($publicKey);
-        return [
-            'path' => $path,
-            'private_key' => $node['private_key'],
-            'public_key' => $publicKey,
-            'address' => strtolower($address),
         ];
     }
 

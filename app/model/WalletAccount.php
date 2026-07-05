@@ -11,7 +11,7 @@ class WalletAccount extends BaseModel
         'network_code',
         'derivation_path',
         'xpub',
-        'encrypted_xprv',
+        'encrypted_account_xprv',
         'next_index',
         'deposit_timeout_minutes',
         'collection_type',

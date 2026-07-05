@@ -333,7 +333,7 @@ class WalletService
 
     private function sanitizeAccount(array $account): array
     {
-        $account['encrypted_xprv'] = '';
+        $account['encrypted_account_xprv'] = '';
         $account['encrypted_gas_funder_private_key'] = '';
         $account['deposit_timeout_minutes'] = min(1440, max(1, (int)($account['deposit_timeout_minutes'] ?? 10)));
         $account['collection_type'] = in_array(($account['collection_type'] ?? 'local'), ['local', 'exchange'], true) ? $account['collection_type'] : 'local';

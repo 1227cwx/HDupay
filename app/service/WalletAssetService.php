@@ -395,7 +395,7 @@ class WalletAssetService
             $account['network_name'] = config('chains.networks.' . $networkCode . '.name') ?: $networkCode;
             $account['chain_id'] = (int)(config('chains.networks.' . $networkCode . '.chain_id') ?: 0);
             $account['native_symbol'] = $this->nativeSymbol($networkCode);
-            $account['encrypted_xprv'] = '';
+            $account['encrypted_account_xprv'] = '';
             $account['encrypted_gas_funder_private_key'] = '';
             if ($includeGasMeta) {
                 $account['gas_native_balance'] = $this->formatTokenAmount((string)($account['gas_native_balance_wei'] ?? '0'), 18);

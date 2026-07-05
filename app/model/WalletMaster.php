@@ -9,7 +9,7 @@ class WalletMaster extends BaseModel
     protected static array $fields = [
         'name',
         'mnemonic_fingerprint',
-        'encrypted_seed_or_xprv',
+        'encrypted_seed',
         'status',
         'created_at',
         'updated_at',
