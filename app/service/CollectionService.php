@@ -297,20 +297,43 @@ class CollectionService
             CollectionTask::mark((int)$task['id'], 'pending_collect');
             return ['task_id' => $task['id'], 'ok' => true, 'status' => 'pending_collect'];
         }
-        $receipt = $rpc->getTransactionReceipt($task['network_code'], $task['gas_funding_tx_hash']);
+        $txHash = (string)$task['gas_funding_tx_hash'];
+        $receipt = $rpc->getTransactionReceipt($task['network_code'], $txHash);
         if (!$receipt) {
             return ['task_id' => $task['id'], 'ok' => true, 'status' => 'gas_funding', 'note' => '等待交易回执'];
         }
-        if (strtolower((string)($receipt['status'] ?? '0x0')) === '0x1') {
-            GasFundingTransaction::markByTxHash((string)$task['gas_funding_tx_hash'], 'success');
-            CollectionTask::mark((int)$task['id'], 'pending_collect', ['error_message' => '']);
-            return ['task_id' => $task['id'], 'ok' => true, 'status' => 'pending_collect'];
+
+        $status = strtolower((string)($receipt['status'] ?? '0x0'));
+        if ($status !== '0x1') {
+            $message = 'Gas 补充交易失败，交易哈希：' . $txHash;
+            GasFundingTransaction::markFailedByTxHash($txHash, $message);
+            CollectionTask::mark((int)$task['id'], 'manual_required', ['error_message' => $message]);
+            return ['task_id' => $task['id'], 'ok' => false, 'status' => 'manual_required'];
         }
-        GasFundingTransaction::markByTxHash((string)$task['gas_funding_tx_hash'], 'failed');
-        CollectionTask::mark((int)$task['id'], 'manual_required', [
-            'error_message' => 'gas 补充交易失败，交易哈希：' . $task['gas_funding_tx_hash'],
-        ]);
-        return ['task_id' => $task['id'], 'ok' => false, 'status' => 'manual_required'];
+
+        $hex = new EvmHexService();
+        $requiredConfirmations = $this->gasFundingRequiredConfirmations($task, $rpc);
+        $blockNumber = $hex->quantityToInt((string)($receipt['blockNumber'] ?? '0x0'));
+        $latest = $rpc->getBlockNumber($task['network_code']);
+        $currentConfirmations = $this->currentConfirmations($latest, $blockNumber, $requiredConfirmations);
+        if ($currentConfirmations < $requiredConfirmations) {
+            GasFundingTransaction::markConfirmingByTxHash($txHash, $blockNumber, $currentConfirmations, $requiredConfirmations);
+            return ['task_id' => $task['id'], 'ok' => true, 'status' => 'gas_funding', 'confirmations' => $currentConfirmations . '/' . $requiredConfirmations];
+        }
+
+        GasFundingTransaction::markSuccessByTxHash($txHash, $blockNumber, $currentConfirmations, $requiredConfirmations);
+        CollectionTask::mark((int)$task['id'], 'pending_collect', ['error_message' => '']);
+        return ['task_id' => $task['id'], 'ok' => true, 'status' => 'pending_collect'];
+    }
+
+    private function gasFundingRequiredConfirmations(array $task, EvmRpcService $rpc): int
+    {
+        $requiredConfirmations = (int)($task['required_confirmations'] ?? 0);
+        if ($requiredConfirmations > 0) {
+            return $requiredConfirmations;
+        }
+        $cfg = $rpc->runtimeConfig((string)$task['network_code']);
+        return max(1, (int)($cfg['confirm_blocks'] ?? 1));
     }
 
     private function checkCollecting(array $task, EvmRpcService $rpc): array
@@ -407,6 +430,10 @@ class CollectionService
         }
         $nonce = $rpc->getTransactionCount($networkCode, $account['gas_funder_address']);
         $cfg = $rpc->runtimeConfig($networkCode);
+        $requiredConfirmations = (int)($task['required_confirmations'] ?? 0);
+        if ($requiredConfirmations <= 0) {
+            $requiredConfirmations = max(1, (int)($cfg['confirm_blocks'] ?? 1));
+        }
         $raw = (new TransactionSignerService())->signLegacy([
             'nonce' => (new EvmHexService())->decimalToQuantity($nonce),
             'from' => $account['gas_funder_address'],
@@ -420,11 +447,16 @@ class CollectionService
         $txHash = $rpc->sendRawTransaction($networkCode, $raw);
         GasFundingTransaction::createRecord([
             'network_code' => $networkCode,
+            'business_type' => 'collection',
+            'business_id' => (int)$task['id'],
             'from_address' => strtolower($account['gas_funder_address']),
             'to_address' => strtolower($task['from_address']),
             'amount_wei' => $value,
             'tx_hash' => strtolower($txHash),
             'status' => 'sent',
+            'required_confirmations' => $requiredConfirmations,
+            'current_confirmations' => 0,
+            'error_message' => '',
         ]);
         CollectionTask::mark((int)$task['id'], 'gas_funding', ['gas_funding_tx_hash' => strtolower($txHash)]);
         return strtolower($txHash);

@@ -286,15 +286,24 @@ CREATE TABLE IF NOT EXISTS `collection_tasks` (
 CREATE TABLE IF NOT EXISTS `gas_funding_transactions` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `network_code` varchar(64) NOT NULL,
+  `business_type` varchar(32) NOT NULL DEFAULT '',
+  `business_id` bigint unsigned NOT NULL DEFAULT 0,
   `from_address` varchar(128) NOT NULL,
   `to_address` varchar(128) NOT NULL,
   `amount_wei` varchar(100) NOT NULL,
   `tx_hash` varchar(128) NOT NULL,
   `status` varchar(32) NOT NULL DEFAULT 'sent',
+  `tx_block_number` bigint unsigned NOT NULL DEFAULT 0,
+  `current_confirmations` int unsigned NOT NULL DEFAULT 0,
+  `required_confirmations` int unsigned NOT NULL DEFAULT 0,
+  `error_message` text NULL,
+  `confirmed_at` datetime NULL,
   `created_at` datetime NOT NULL,
   `updated_at` datetime NOT NULL,
   PRIMARY KEY (`id`),
-  KEY `idx_tx` (`tx_hash`)
+  KEY `idx_tx` (`tx_hash`),
+  KEY `idx_business` (`business_type`,`business_id`),
+  KEY `idx_status` (`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 CREATE TABLE IF NOT EXISTS `audit_logs` (
