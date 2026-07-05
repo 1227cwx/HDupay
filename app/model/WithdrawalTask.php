@@ -192,14 +192,12 @@ class WithdrawalTask extends BaseModel
     {
         $id = (int)($task['id'] ?? 0);
         $networkCode = (string)($task['network_code'] ?? '');
-        $tokenCode = strtoupper((string)($task['token_code'] ?? ''));
-        if ($id <= 0 || $networkCode === '' || $tokenCode === '') {
+        if ($id <= 0 || $networkCode === '') {
             return false;
         }
 
         return self::query()
             ->where('network_code', $networkCode)
-            ->where('token_code', $tokenCode)
             ->where('id', '<', $id)
             ->where(function ($query) {
                 $query->whereIn('status', self::BLOCKING_STATUSES)
@@ -211,27 +209,27 @@ class WithdrawalTask extends BaseModel
             ->exists();
     }
 
-    public static function acquireNetworkTokenLock(string $networkCode, string $tokenCode): bool
+    public static function acquireNetworkLock(string $networkCode): bool
     {
         $row = self::query()
             ->getConnection()
-            ->selectOne('SELECT GET_LOCK(?, 0) AS locked', [self::networkTokenLockName($networkCode, $tokenCode)]);
+            ->selectOne('SELECT GET_LOCK(?, 0) AS locked', [self::networkLockName($networkCode)]);
         return (int)self::dbValue($row, 'locked') === 1;
     }
 
-    public static function releaseNetworkTokenLock(string $networkCode, string $tokenCode): void
+    public static function releaseNetworkLock(string $networkCode): void
     {
         try {
             self::query()
                 ->getConnection()
-                ->selectOne('SELECT RELEASE_LOCK(?) AS released', [self::networkTokenLockName($networkCode, $tokenCode)]);
+                ->selectOne('SELECT RELEASE_LOCK(?) AS released', [self::networkLockName($networkCode)]);
         } catch (\Throwable) {
         }
     }
 
-    private static function networkTokenLockName(string $networkCode, string $tokenCode): string
+    private static function networkLockName(string $networkCode): string
     {
-        return 'hdupay:withdrawal:' . sha1(strtolower($networkCode) . ':' . strtoupper($tokenCode));
+        return 'hdupay:withdrawal:' . sha1(strtolower($networkCode));
     }
 
     private static function dbValue(mixed $row, string $key): mixed

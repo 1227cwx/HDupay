@@ -215,8 +215,8 @@ class WithdrawalService
         if (!$task) {
             throw new RuntimeException('转出记录不存在');
         }
-        if (($task['status'] ?? '') !== 'withdraw_failed') {
-            throw new RuntimeException('只有转出失败的记录才允许手动重新转出');
+        if (!in_array((string)($task['status'] ?? ''), WithdrawalTask::RETRY_STATUSES, true)) {
+            throw new RuntimeException('只有转出失败或需要手动处理的记录才允许手动重新转出');
         }
         return $this->processWithFailureHandling($task, true, true);
     }
@@ -235,17 +235,16 @@ class WithdrawalService
         $taskId = (int)($task['id'] ?? 0);
         $originalStatus = (string)($task['status'] ?? '');
         $networkCode = (string)($task['network_code'] ?? '');
-        $tokenCode = strtoupper((string)($task['token_code'] ?? ''));
-        $lockAcquired = WithdrawalTask::acquireNetworkTokenLock($networkCode, $tokenCode);
+        $lockAcquired = WithdrawalTask::acquireNetworkLock($networkCode);
         if (!$lockAcquired) {
             if ($throwOnFailure) {
-                throw new RuntimeException('同网络同代币转出任务正在处理，请稍后再试');
+                throw new RuntimeException('同网络转出任务正在处理，请稍后再试');
             }
             return [
                 'task_id' => $taskId,
                 'ok' => true,
                 'skipped' => true,
-                'reason' => 'network_token_locked',
+                'reason' => 'network_locked',
             ];
         }
 
@@ -253,13 +252,13 @@ class WithdrawalService
         try {
             if (WithdrawalTask::hasEarlierBlockingTask($task)) {
                 if ($throwOnFailure) {
-                    throw new RuntimeException('同网络同代币已有更早的转出任务未完成，请稍后再试');
+                    throw new RuntimeException('同网络已有更早的转出任务未完成，请稍后再试');
                 }
                 return [
                     'task_id' => $taskId,
                     'ok' => true,
                     'skipped' => true,
-                    'reason' => 'network_token_busy',
+                    'reason' => 'network_busy',
                 ];
             }
 
@@ -295,7 +294,7 @@ class WithdrawalService
                 return ['task_id' => $taskId, 'ok' => false, 'error' => $e->getMessage()];
             }
         } finally {
-            WithdrawalTask::releaseNetworkTokenLock($networkCode, $tokenCode);
+            WithdrawalTask::releaseNetworkLock($networkCode);
         }
     }
 
