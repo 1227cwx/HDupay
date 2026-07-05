@@ -149,7 +149,7 @@ class OpenApiService
         if (!$order || (int)($order['api_client_id'] ?? 0) !== (int)$client['id']) {
             throw new InvalidArgumentException('订单不存在');
         }
-        return (new DepositService())->publicStatus($orderNo, true, $baseUrl);
+        return (new DepositService())->publicStatus($orderNo, '', true, $baseUrl, false);
     }
 
     public function sendCallbackForOrder(array $order): void

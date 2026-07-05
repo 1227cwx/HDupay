@@ -33,7 +33,11 @@ class DepositController extends BaseController
     public function detail(Request $request)
     {
         try {
-            return $this->ok((new DepositService())->detail((string)$request->input('order_no', '')));
+            return $this->ok((new DepositService())->publicDetail(
+                (string)$request->input('order_no', ''),
+                (string)$request->input('order_token', ''),
+                $this->publicBaseUrl($request)
+            ));
         } catch (Throwable $e) {
             return $this->fail($e);
         }
@@ -54,6 +58,7 @@ class DepositController extends BaseController
             $input = $this->input($request);
             return $this->ok((new DepositService())->publicStatus(
                 (string)($input['order_no'] ?? ''),
+                (string)($input['order_token'] ?? ''),
                 !empty($input['allow_terminal']),
                 $this->publicBaseUrl($request)
             ));

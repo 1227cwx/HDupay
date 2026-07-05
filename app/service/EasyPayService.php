@@ -62,9 +62,11 @@ class EasyPayService
     {
         $order = $this->activeEasyPayOrder($epayOrderNo);
         $depositOrderNo = (string)($order['deposit_order_no'] ?? '');
+        $depositOrderToken = '';
         if ($depositOrderNo !== '') {
             $depositOrder = DepositOrder::findByOrderNo($depositOrderNo);
             if ($depositOrder) {
+                $depositOrderToken = (string)($depositOrder['order_token'] ?? '');
                 $status = (string)($depositOrder['status'] ?? '');
                 if (!in_array($status, ['waiting', 'confirming'], true)) {
                     throw new InvalidArgumentException($this->terminalAccessMessage($status));
@@ -79,6 +81,7 @@ class EasyPayService
             'money' => (string)$order['money'],
             'fiat_currency' => 'CNY',
             'deposit_order_no' => $depositOrderNo,
+            'deposit_order_token' => $depositOrderToken,
             'status' => (string)$order['status'],
         ];
     }
@@ -418,7 +421,7 @@ class EasyPayService
 
     private function makeEpayOrderNo(): string
     {
-        return 'EP' . date('YmdHis') . random_int(100000, 999999);
+        return 'EP' . date('Ymd') . bin2hex(random_bytes(12));
     }
 
     private function terminalAccessMessage(string $status): string

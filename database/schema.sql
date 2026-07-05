@@ -196,6 +196,7 @@ CREATE TABLE IF NOT EXISTS `payment_addresses` (
 CREATE TABLE IF NOT EXISTS `deposit_orders` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `order_no` varchar(64) NOT NULL,
+  `order_token` varchar(64) NOT NULL DEFAULT '',
   `user_id` bigint unsigned NOT NULL DEFAULT 0,
   `source` varchar(32) NOT NULL DEFAULT 'frontend',
   `source_ip` varchar(64) NOT NULL DEFAULT '',

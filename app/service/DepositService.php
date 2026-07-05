@@ -53,6 +53,7 @@ class DepositService
         }
 
         $orderNo = $this->makeOrderNo();
+        $orderToken = $this->makeOrderToken();
         $address = (new AddressPoolService())->allocate($networkCode, $tokenCode, $orderNo);
         $timeoutMinutes = $this->depositTimeoutMinutes((int)($address['wallet_account_id'] ?? 0));
         $expireAt = date('Y-m-d H:i:s', time() + $timeoutMinutes * 60);
@@ -67,6 +68,7 @@ class DepositService
 
         $record = [
             'order_no' => $orderNo,
+            'order_token' => $orderToken,
             'user_id' => (int)($input['user_id'] ?? 0),
             'source' => $source,
             'source_ip' => $sourceIp,
@@ -158,7 +160,12 @@ class DepositService
         return $result;
     }
 
-    public function publicStatus(string $orderNo, bool $allowTerminal = false, string $baseUrl = ''): array
+    public function publicDetail(string $orderNo, string $orderToken, string $baseUrl = ''): array
+    {
+        return $this->publicStatus($orderNo, $orderToken, false, $baseUrl);
+    }
+
+    public function publicStatus(string $orderNo, string $orderToken, bool $allowTerminal = false, string $baseUrl = '', bool $requireToken = true): array
     {
         $orderNo = trim($orderNo);
         if ($orderNo === '') {
@@ -167,6 +174,9 @@ class DepositService
         $order = DepositOrder::findByOrderNo($orderNo);
         if (!$order) {
             throw new InvalidArgumentException('订单不存在');
+        }
+        if ($requireToken) {
+            $this->assertOrderToken($order, $orderToken);
         }
         $order = $this->refreshExpiredOrder($order);
         $order = $this->appendConfirmationProgress($order);
@@ -191,6 +201,7 @@ class DepositService
 
         return [
             'order_no' => $orderNo,
+            'order_token' => (string)($order['order_token'] ?? ''),
             'status' => $status,
             'progress' => $progress,
             'network_id' => (string)$order['network_code'],
@@ -204,7 +215,7 @@ class DepositService
             'return_url_signed' => (bool)$returnInfo['return_url_signed'],
             'return_url_append_status' => (bool)$returnInfo['return_url_append_status'],
             'return_url_close_on_empty' => (bool)$returnInfo['return_url_close_on_empty'],
-            'pay_url' => $this->payUrl($orderNo, $baseUrl),
+            'pay_url' => $this->payUrl($orderNo, $baseUrl, (string)($order['order_token'] ?? '')),
         ];
     }
 
@@ -341,6 +352,7 @@ class DepositService
     {
         return [
             'order_no' => $order['order_no'],
+            'order_token' => $order['order_token'] ?? '',
             'network' => $order['network_code'],
             'network_id' => $order['network_code'],
             'token' => $order['token_code'],
@@ -351,7 +363,7 @@ class DepositService
             'address' => $order['address'],
             'expire_at' => $order['expire_at'],
             'return_url' => $order['return_url'] ?? '',
-            'pay_url' => $this->payUrl((string)$order['order_no'], $baseUrl),
+            'pay_url' => $this->payUrl((string)$order['order_no'], $baseUrl, (string)($order['order_token'] ?? '')),
             'timeout_minutes' => $timeoutMinutes,
         ];
     }
@@ -408,16 +420,33 @@ class DepositService
         return $url;
     }
 
-    private function payUrl(string $orderNo, string $baseUrl = ''): string
+    private function payUrl(string $orderNo, string $baseUrl = '', string $orderToken = ''): string
     {
         $path = '/pay?order_no=' . rawurlencode($orderNo);
+        if ($orderToken !== '') {
+            $path .= '&order_token=' . rawurlencode($orderToken);
+        }
         $baseUrl = rtrim(trim($baseUrl), '/');
         return $baseUrl !== '' ? $baseUrl . $path : $path;
     }
 
     private function makeOrderNo(): string
     {
-        return 'D' . date('YmdHis') . random_int(100000, 999999);
+        return 'D' . date('Ymd') . bin2hex(random_bytes(12));
+    }
+
+    private function makeOrderToken(): string
+    {
+        return bin2hex(random_bytes(24));
+    }
+
+    private function assertOrderToken(array $order, string $orderToken): void
+    {
+        $expected = (string)($order['order_token'] ?? '');
+        $orderToken = trim($orderToken);
+        if ($expected === '' || $orderToken === '' || !hash_equals($expected, $orderToken)) {
+            throw new InvalidArgumentException('订单访问凭证无效');
+        }
     }
 
     private function depositTimeoutMinutes(int $walletAccountId): int

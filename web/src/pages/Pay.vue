@@ -334,7 +334,7 @@ async function create() {
     closePageAttempted.value = false
     accessError.value = ''
     message.success(text.created)
-    await router.replace({ path: '/pay', query: { order_no: data.order_no } })
+    await router.replace({ path: '/pay', query: { order_no: data.order_no, order_token: data.order_token } })
     startPolling()
   } catch (e: any) {
     message.error(e.message)
@@ -355,7 +355,7 @@ async function loadEasyPayOrder(orderNo: string) {
     accessError.value = ''
     if (data.deposit_order_no) {
       loadingOrder.value = false
-      await loadPaymentOrder(String(data.deposit_order_no), false)
+      await loadPaymentOrder(String(data.deposit_order_no), false, String(data.deposit_order_token || ''))
     }
   } catch (e: any) {
     epayInfo.value = {}
@@ -368,10 +368,10 @@ async function loadEasyPayOrder(orderNo: string) {
   }
 }
 
-async function loadPaymentOrder(orderNo: string, allowTerminal = false) {
+async function loadPaymentOrder(orderNo: string, allowTerminal = false, orderToken = '') {
   loadingOrder.value = true
   try {
-    const data: any = await api.post('/api/deposit/status', { order_no: orderNo, allow_terminal: allowTerminal })
+    const data: any = await api.post('/api/deposit/status', { order_no: orderNo, order_token: orderToken || currentOrderToken(), allow_terminal: allowTerminal })
     setPayment(data)
     accessError.value = ''
     if (data.status === 'success') {
@@ -403,7 +403,7 @@ function stopPolling() {
 async function loadStatus() {
   if (!payment.value.order_no || successHandled.value) return
   try {
-    const data: any = await api.post('/api/deposit/status', { order_no: payment.value.order_no, allow_terminal: true })
+    const data: any = await api.post('/api/deposit/status', { order_no: payment.value.order_no, order_token: currentOrderToken(), allow_terminal: true })
     setPayment(data)
     if (data.status === 'success') {
       handleSuccess()
@@ -421,6 +421,14 @@ async function loadStatus() {
 function setPayment(data: any) {
   payment.value = data || {}
   progress.value = Number(data?.progress || 0)
+}
+
+function currentOrderToken() {
+  return String(payment.value.order_token || queryValue(route.query.order_token) || '')
+}
+
+function queryValue(value: unknown) {
+  return String(Array.isArray(value) ? (value[0] || '') : (value || ''))
 }
 
 async function handleSuccess() {
@@ -517,12 +525,13 @@ function formatDuration(seconds: number) {
 onMounted(async () => {
   try {
     await loadInit()
-    const orderNo = Array.isArray(route.query.order_no) ? route.query.order_no[0] : route.query.order_no
-    const easyPayOrderNo = Array.isArray(route.query.epay_order) ? route.query.epay_order[0] : route.query.epay_order
+    const orderNo = queryValue(route.query.order_no)
+    const orderToken = queryValue(route.query.order_token)
+    const easyPayOrderNo = queryValue(route.query.epay_order)
     if (orderNo) {
-      await loadPaymentOrder(String(orderNo), false)
+      await loadPaymentOrder(orderNo, false, orderToken)
     } else if (easyPayOrderNo) {
-      await loadEasyPayOrder(String(easyPayOrderNo))
+      await loadEasyPayOrder(easyPayOrderNo)
     }
   } finally {
     pageInitializing.value = false
@@ -546,19 +555,20 @@ onBeforeUnmount(() => {
   }
 })
 
-watch(() => route.query.order_no, (value) => {
+watch(() => [route.query.order_no, route.query.order_token], ([orderValue, tokenValue]) => {
   if (successHandled.value) return
-  const orderNo = Array.isArray(value) ? value[0] : value
-  if (orderNo && orderNo !== payment.value.order_no) {
-    loadPaymentOrder(String(orderNo), false)
+  const orderNo = queryValue(orderValue)
+  const orderToken = queryValue(tokenValue)
+  if (orderNo && (orderNo !== payment.value.order_no || orderToken !== currentOrderToken())) {
+    loadPaymentOrder(orderNo, false, orderToken)
   }
 })
 
 watch(() => route.query.epay_order, (value) => {
   if (successHandled.value || route.query.order_no) return
-  const orderNo = Array.isArray(value) ? value[0] : value
+  const orderNo = queryValue(value)
   if (orderNo && orderNo !== epayOrderNo.value) {
-    loadEasyPayOrder(String(orderNo))
+    loadEasyPayOrder(orderNo)
   }
 })
 </script>
