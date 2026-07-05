@@ -185,11 +185,6 @@ class DepositService
         return $result;
     }
 
-    public function publicDetail(string $orderNo, string $orderToken, string $baseUrl = ''): array
-    {
-        return $this->publicStatus($orderNo, $orderToken, false, $baseUrl);
-    }
-
     public function publicStatus(string $orderNo, string $orderToken, bool $allowTerminal = false, string $baseUrl = '', bool $requireToken = true): array
     {
         $orderNo = trim($orderNo);

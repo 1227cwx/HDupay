@@ -30,19 +30,6 @@ class DepositController extends BaseController
         }
     }
 
-    public function detail(Request $request)
-    {
-        try {
-            return $this->ok((new DepositService())->publicDetail(
-                (string)$request->input('order_no', ''),
-                (string)$request->input('order_token', ''),
-                $this->publicBaseUrl($request)
-            ));
-        } catch (Throwable $e) {
-            return $this->fail($e);
-        }
-    }
-
     public function options(Request $request)
     {
         try {

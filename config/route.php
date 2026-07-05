@@ -62,7 +62,6 @@ Route::group('/api/deposit', function () {
     Route::post('/create', [DepositController::class, 'create']);
     Route::get('/networks', [DepositController::class, 'networks']);
     Route::get('/options', [DepositController::class, 'options']);
-    Route::get('/detail', [DepositController::class, 'detail']);
     Route::post('/status', [DepositController::class, 'status']);
 })->middleware(PublicDomainMiddleware::class);
 Route::group('/api/easypay', function () {
