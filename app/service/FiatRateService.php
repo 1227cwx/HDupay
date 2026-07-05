@@ -40,7 +40,6 @@ class FiatRateService
 
     public function __construct()
     {
-        (new FiatExchangeRateSchemaService())->ensure();
         $this->ensureDefaultRows();
         $this->ensureDefaultSettings();
     }

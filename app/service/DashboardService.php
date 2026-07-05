@@ -11,7 +11,6 @@ class DashboardService
 {
     public function summary(): array
     {
-        (new DepositOrderSchemaService())->ensure();
         return [
             'rpc_enabled' => count(RpcNetworkSetting::enabledList()),
             'orders' => DepositOrder::countAll(),

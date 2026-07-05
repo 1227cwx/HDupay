@@ -265,7 +265,6 @@ class EvmRpcService
 
     private function runtimeNetworkSetting(string $networkCode): array
     {
-        (new RpcNetworkSettingSchemaService())->ensure();
         $defaults = config('chains.networks.' . $networkCode) ?: [];
         if (!$defaults) {
             throw new RuntimeException('网络不存在：' . $networkCode);

@@ -15,7 +15,6 @@ class AdminAuthService
 
     public function login(array $input, Request $request): array
     {
-        (new AdminLoginAttemptSchemaService())->ensure();
 
         $username = trim((string)($input['username'] ?? ''));
         $password = (string)($input['password'] ?? '');

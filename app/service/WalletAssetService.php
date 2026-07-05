@@ -21,7 +21,6 @@ class WalletAssetService
 
     public function __construct()
     {
-        (new WalletAssetSchemaService())->ensure();
         $this->ensureCollectionRows();
     }
 

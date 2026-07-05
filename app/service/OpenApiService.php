@@ -15,12 +15,6 @@ use Throwable;
 
 class OpenApiService
 {
-    public function __construct()
-    {
-        (new OpenApiSchemaService())->ensure();
-        (new DepositOrderSchemaService())->ensure();
-    }
-
     public function list(array $filters, int $page, int $perPage): array
     {
         $result = OpenApiClient::searchPage($filters, $page, $perPage);

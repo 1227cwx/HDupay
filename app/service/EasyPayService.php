@@ -15,13 +15,6 @@ use Throwable;
 
 class EasyPayService
 {
-    public function __construct()
-    {
-        (new OpenApiSchemaService())->ensure();
-        (new EasyPaySchemaService())->ensure();
-        (new DepositOrderSchemaService())->ensure();
-    }
-
     public function submit(Request $request, array $input): string
     {
         $params = $this->normalizeParams($input);

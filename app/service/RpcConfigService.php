@@ -15,7 +15,6 @@ class RpcConfigService
 {
     public function list(): array
     {
-        (new RpcNetworkSettingSchemaService())->ensure();
         $this->ensureDefaults();
         $proxyNames = $this->proxyNames();
         $groups = RpcGroup::allList();
@@ -73,7 +72,6 @@ class RpcConfigService
 
     public function saveNetwork(array $input): array
     {
-        (new RpcNetworkSettingSchemaService())->ensure();
         $networkCode = $this->validNetwork((string)($input['network_code'] ?? ''));
         $exists = RpcNetworkSetting::findByNetwork($networkCode) ?: [];
         $defaults = config('chains.networks.' . $networkCode) ?: [];
@@ -285,7 +283,6 @@ class RpcConfigService
 
     public function ensureDefaults(): void
     {
-        (new RpcNetworkSettingSchemaService())->ensure();
         $this->ensureTokenDefaults();
         foreach (config('chains.networks') ?: [] as $networkCode => $cfg) {
             $setting = RpcNetworkSetting::findByNetwork((string)$networkCode);

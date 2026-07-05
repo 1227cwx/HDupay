@@ -26,7 +26,6 @@ class EvmMonitorService
 
     public function runOnce(string $networkCode): array
     {
-        (new DepositOrderSchemaService())->ensure();
         $rpc = new EvmRpcService();
         $cfg = $rpc->runtimeConfig($networkCode);
         if (empty($cfg['enabled'])) {

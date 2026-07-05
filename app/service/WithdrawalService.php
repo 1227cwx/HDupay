@@ -18,11 +18,6 @@ class WithdrawalService
     private const AUTO_WITHDRAW_INTERVAL_KEY = 'withdraw.auto_withdraw_interval_seconds';
     private const PAYMENT_TOKEN_CODES = ['USDC', 'USDT'];
 
-    public function __construct()
-    {
-        (new WalletAssetSchemaService())->ensure();
-    }
-
     public function list(array $filters, int $page, int $perPage): array
     {
         $result = WithdrawalTask::listPage($filters, $page, $perPage);

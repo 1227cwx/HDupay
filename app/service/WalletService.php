@@ -17,11 +17,6 @@ use RuntimeException;
 
 class WalletService
 {
-    public function __construct()
-    {
-        (new WalletAssetSchemaService())->ensure();
-    }
-
     public function initialize(array $input): array
     {
         return (new EvmWalletService())->initializeWallet((string)($input['name'] ?? 'default'), $input['mnemonic'] ?? null);

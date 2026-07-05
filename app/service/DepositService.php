@@ -12,12 +12,6 @@ use InvalidArgumentException;
 
 class DepositService
 {
-    public function __construct()
-    {
-        (new DepositOrderSchemaService())->ensure();
-        (new EasyPaySchemaService())->ensure();
-    }
-
     public function networks(): array
     {
         return (new WalletService())->depositNetworkOptions();
