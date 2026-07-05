@@ -17,6 +17,20 @@ class GasFundingTransaction extends BaseModel
         'updated_at',
     ];
 
+    public static function markByTxHash(string $txHash, string $status): bool
+    {
+        if (!in_array($status, ['sent', 'success', 'failed'], true)) {
+            return false;
+        }
+
+        return self::query()
+            ->where('tx_hash', strtolower($txHash))
+            ->update([
+                'status' => $status,
+                'updated_at' => self::now(),
+            ]) > 0;
+    }
+
     public static function deleteByAddresses(array $addresses): int
     {
         $addresses = array_values(array_filter(array_unique(array_map(

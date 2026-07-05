@@ -296,9 +296,11 @@ class CollectionService
             return ['task_id' => $task['id'], 'ok' => true, 'status' => 'gas_funding', 'note' => '等待交易回执'];
         }
         if (strtolower((string)($receipt['status'] ?? '0x0')) === '0x1') {
+            GasFundingTransaction::markByTxHash((string)$task['gas_funding_tx_hash'], 'success');
             CollectionTask::mark((int)$task['id'], 'pending_collect', ['error_message' => '']);
             return ['task_id' => $task['id'], 'ok' => true, 'status' => 'pending_collect'];
         }
+        GasFundingTransaction::markByTxHash((string)$task['gas_funding_tx_hash'], 'failed');
         CollectionTask::mark((int)$task['id'], 'manual_required', [
             'error_message' => 'gas 补充交易失败，交易哈希：' . $task['gas_funding_tx_hash'],
         ]);

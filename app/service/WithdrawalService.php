@@ -378,9 +378,11 @@ class WithdrawalService
             return ['task_id' => $task['id'], 'ok' => true, 'status' => 'gas_funding', 'note' => '等待交易回执'];
         }
         if (strtolower((string)($receipt['status'] ?? '0x0')) === '0x1') {
+            GasFundingTransaction::markByTxHash((string)$task['gas_funding_tx_hash'], 'success');
             WithdrawalTask::mark((int)$task['id'], 'pending_withdraw', ['error_message' => '']);
             return ['task_id' => $task['id'], 'ok' => true, 'status' => 'pending_withdraw'];
         }
+        GasFundingTransaction::markByTxHash((string)$task['gas_funding_tx_hash'], 'failed');
         WithdrawalTask::mark((int)$task['id'], 'manual_required', [
             'error_message' => 'Gas 补充交易失败，交易哈希：' . $task['gas_funding_tx_hash'],
         ]);
