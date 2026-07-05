@@ -6,6 +6,14 @@ class WalletMaster extends BaseModel
 {
     protected $table = 'wallet_masters';
     protected $primaryKey = 'id';
+    protected static array $fields = [
+        'name',
+        'mnemonic_fingerprint',
+        'encrypted_seed_or_xprv',
+        'status',
+        'created_at',
+        'updated_at',
+    ];
 
     public static function latestActive(): ?array
     {

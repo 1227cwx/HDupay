@@ -6,6 +6,39 @@ class DepositOrder extends BaseModel
 {
     protected $table = 'deposit_orders';
     protected $primaryKey = 'id';
+    protected static array $fields = [
+        'order_no',
+        'user_id',
+        'source',
+        'source_ip',
+        'api_client_id',
+        'network_code',
+        'token_code',
+        'fiat_currency',
+        'fiat_amount',
+        'token_amount',
+        'exchange_rate',
+        'rate_provider',
+        'rate_fetched_at',
+        'return_url',
+        'amount_int',
+        'amount_display',
+        'paid_amount_int',
+        'address_id',
+        'address',
+        'status',
+        'expire_at',
+        'confirmed_at',
+        'tx_hash',
+        'tx_log_index',
+        'tx_block_number',
+        'from_address',
+        'to_address',
+        'required_confirmations',
+        'current_confirmations',
+        'created_at',
+        'updated_at',
+    ];
 
     public static function findByOrderNo(string $orderNo): ?array
     {
@@ -112,6 +145,7 @@ class DepositOrder extends BaseModel
     {
         $data['status'] = 'confirming';
         $data['updated_at'] = self::now();
+        $data = self::filterWriteData($data);
         return self::query()->where('id', $id)->where('status', 'waiting')->update($data) > 0;
     }
 
@@ -119,6 +153,7 @@ class DepositOrder extends BaseModel
     {
         $data['status'] = 'failed';
         $data['updated_at'] = self::now();
+        $data = self::filterWriteData($data);
         return self::query()->where('id', $id)->whereIn('status', ['waiting', 'confirming'])->update($data) > 0;
     }
 

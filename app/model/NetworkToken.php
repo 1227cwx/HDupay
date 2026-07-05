@@ -6,6 +6,16 @@ class NetworkToken extends BaseModel
 {
     protected $table = 'network_tokens';
     protected $primaryKey = 'id';
+    protected static array $fields = [
+        'network_code',
+        'token_code',
+        'contract_address',
+        'decimals',
+        'standard',
+        'status',
+        'created_at',
+        'updated_at',
+    ];
 
     public static function findByNetworkToken(string $networkCode, string $tokenCode): ?array
     {

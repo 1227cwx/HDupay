@@ -6,6 +6,29 @@ class WalletAccount extends BaseModel
 {
     protected $table = 'wallet_accounts';
     protected $primaryKey = 'id';
+    protected static array $fields = [
+        'wallet_master_id',
+        'network_code',
+        'derivation_path',
+        'xpub',
+        'encrypted_xprv',
+        'next_index',
+        'deposit_timeout_minutes',
+        'collection_type',
+        'collection_address',
+        'collection_derivation_path',
+        'gas_funder_address',
+        'gas_funder_derivation_path',
+        'encrypted_gas_funder_private_key',
+        'gas_sync_enabled',
+        'gas_native_balance_wei',
+        'gas_sync_status',
+        'gas_sync_error',
+        'gas_last_balance_sync_at',
+        'status',
+        'created_at',
+        'updated_at',
+    ];
 
     public static function findByNetwork(string $networkCode): ?array
     {

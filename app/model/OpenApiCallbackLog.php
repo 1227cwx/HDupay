@@ -6,6 +6,20 @@ class OpenApiCallbackLog extends BaseModel
 {
     protected $table = 'open_api_callback_logs';
     protected $primaryKey = 'id';
+    protected static array $fields = [
+        'client_id',
+        'order_no',
+        'callback_url',
+        'request_body',
+        'http_status',
+        'response_body',
+        'status',
+        'retry_count',
+        'error_message',
+        'last_called_at',
+        'created_at',
+        'updated_at',
+    ];
 
     public static function findByClientAndOrder(int $clientId, string $orderNo): ?array
     {

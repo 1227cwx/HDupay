@@ -6,6 +6,21 @@ class RpcNetworkSetting extends BaseModel
 {
     protected $table = 'rpc_network_settings';
     protected $primaryKey = 'id';
+    protected static array $fields = [
+        'network_code',
+        'contract_address',
+        'decimals',
+        'monitor_interval_seconds',
+        'min_confirm_blocks',
+        'confirm_blocks',
+        'large_amount_threshold',
+        'scan_step_blocks',
+        'active_group_id',
+        'enabled',
+        'last_monitor_at',
+        'created_at',
+        'updated_at',
+    ];
 
     public static function findByNetwork(string $networkCode): ?array
     {

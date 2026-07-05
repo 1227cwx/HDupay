@@ -6,6 +6,15 @@ class RpcGroup extends BaseModel
 {
     protected $table = 'rpc_groups';
     protected $primaryKey = 'id';
+    protected static array $fields = [
+        'network_code',
+        'name',
+        'rotation_mode',
+        'single_attempts',
+        'max_nodes',
+        'created_at',
+        'updated_at',
+    ];
 
     public static function allList(): array
     {

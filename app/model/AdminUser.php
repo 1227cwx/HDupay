@@ -6,6 +6,15 @@ class AdminUser extends BaseModel
 {
     protected $table = 'admin_users';
     protected $primaryKey = 'id';
+    protected static array $fields = [
+        'username',
+        'password_hash',
+        'nickname',
+        'status',
+        'last_login_at',
+        'created_at',
+        'updated_at',
+    ];
 
     public static function findByUsername(string $username): ?array
     {

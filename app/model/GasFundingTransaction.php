@@ -6,6 +6,16 @@ class GasFundingTransaction extends BaseModel
 {
     protected $table = 'gas_funding_transactions';
     protected $primaryKey = 'id';
+    protected static array $fields = [
+        'network_code',
+        'from_address',
+        'to_address',
+        'amount_wei',
+        'tx_hash',
+        'status',
+        'created_at',
+        'updated_at',
+    ];
 
     public static function deleteByAddresses(array $addresses): int
     {

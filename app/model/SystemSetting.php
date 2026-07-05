@@ -6,6 +6,12 @@ class SystemSetting extends BaseModel
 {
     protected $table = 'system_settings';
     protected $primaryKey = 'id';
+    protected static array $fields = [
+        'key_name',
+        'value',
+        'created_at',
+        'updated_at',
+    ];
 
     public static function getValue(string $key, string $default = ''): string
     {

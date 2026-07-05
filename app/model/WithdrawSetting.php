@@ -6,6 +6,20 @@ class WithdrawSetting extends BaseModel
 {
     protected $table = 'withdraw_settings';
     protected $primaryKey = 'id';
+    protected static array $fields = [
+        'wallet_account_id',
+        'network_code',
+        'token_code',
+        'enabled',
+        'target_address',
+        'min_amount_int',
+        'max_retry_count',
+        'last_run_at',
+        'status',
+        'error_message',
+        'created_at',
+        'updated_at',
+    ];
 
     public static function findByAccountToken(int $walletAccountId, string $tokenCode): ?array
     {

@@ -6,6 +6,23 @@ class WalletCollectionAddress extends BaseModel
 {
     protected $table = 'wallet_collection_addresses';
     protected $primaryKey = 'id';
+    protected static array $fields = [
+        'wallet_account_id',
+        'network_code',
+        'address',
+        'address_lower',
+        'address_type',
+        'is_active',
+        'sync_enabled',
+        'usdc_balance_int',
+        'usdt_balance_int',
+        'native_balance_wei',
+        'sync_status',
+        'sync_error',
+        'last_balance_sync_at',
+        'created_at',
+        'updated_at',
+    ];
 
     public static function listAll(): array
     {

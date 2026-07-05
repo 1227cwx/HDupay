@@ -6,6 +6,21 @@ class ProxyPool extends BaseModel
 {
     protected $table = 'proxy_pools';
     protected $primaryKey = 'id';
+    protected static array $fields = [
+        'name',
+        'proxy_type',
+        'host',
+        'port',
+        'username',
+        'password_cipher',
+        'password_masked',
+        'status',
+        'last_test_status',
+        'last_test_message',
+        'last_test_at',
+        'created_at',
+        'updated_at',
+    ];
 
     public static function enabledList(): array
     {

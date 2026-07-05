@@ -6,6 +6,17 @@ class MonitorCursor extends BaseModel
 {
     protected $table = 'monitor_cursors';
     protected $primaryKey = 'id';
+    protected static array $fields = [
+        'network_code',
+        'token_code',
+        'contract_address',
+        'last_scanned_block',
+        'confirm_blocks',
+        'scan_step_blocks',
+        'status',
+        'created_at',
+        'updated_at',
+    ];
 
     public static function getOrCreate(string $networkCode, string $tokenCode, string $contractAddress, int $confirmBlocks, int $scanStepBlocks): array
     {

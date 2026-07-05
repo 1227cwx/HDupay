@@ -8,6 +8,20 @@ class FiatExchangeRate extends BaseModel
 {
     protected $table = 'fiat_exchange_rates';
     protected $primaryKey = 'id';
+    protected static array $fields = [
+        'token_code',
+        'coingecko_id',
+        'fiat_currency',
+        'rate',
+        'auto_update',
+        'provider',
+        'source_date',
+        'status',
+        'error_message',
+        'last_refresh_at',
+        'created_at',
+        'updated_at',
+    ];
 
     public static function findByTokenCurrency(string $tokenCode, string $fiatCurrency): ?array
     {
@@ -92,6 +106,7 @@ class FiatExchangeRate extends BaseModel
             $data['status'] = 'failed';
             $data['last_refresh_at'] = self::now();
         }
+        $data = self::filterWriteData($data);
 
         return self::query()
             ->where('token_code', strtoupper($tokenCode))

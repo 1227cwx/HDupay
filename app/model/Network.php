@@ -6,6 +6,14 @@ class Network extends BaseModel
 {
     protected $table = 'networks';
     protected $primaryKey = 'id';
+    protected static array $fields = [
+        'code',
+        'name',
+        'chain_id',
+        'status',
+        'created_at',
+        'updated_at',
+    ];
 
     public static function findByCode(string $code): ?array
     {

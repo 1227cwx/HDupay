@@ -6,6 +6,14 @@ class Token extends BaseModel
 {
     protected $table = 'tokens';
     protected $primaryKey = 'id';
+    protected static array $fields = [
+        'code',
+        'name',
+        'decimals',
+        'status',
+        'created_at',
+        'updated_at',
+    ];
 
     public static function findByCode(string $code): ?array
     {

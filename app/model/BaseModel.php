@@ -2,11 +2,13 @@
 
 namespace app\model;
 
+use LogicException;
 use support\Model;
 
 abstract class BaseModel extends Model
 {
-    protected $guarded = [];
+    protected $guarded = ['*'];
+    protected static array $fields = [];
     public $timestamps = false;
 
     protected static function now(): string
@@ -17,8 +19,13 @@ abstract class BaseModel extends Model
     public static function createRecord(array $data): array
     {
         $now = static::now();
-        $data['created_at'] = $data['created_at'] ?? $now;
-        $data['updated_at'] = $data['updated_at'] ?? $now;
+        $data = static::filterWriteData($data);
+        if (static::isKnownField('created_at')) {
+            $data['created_at'] = $data['created_at'] ?? $now;
+        }
+        if (static::isKnownField('updated_at')) {
+            $data['updated_at'] = $data['updated_at'] ?? $now;
+        }
         $id = static::query()->insertGetId($data);
         return static::findById((int)$id) ?? [];
     }
@@ -31,7 +38,13 @@ abstract class BaseModel extends Model
 
     public static function updateById(int $id, array $data): bool
     {
-        $data['updated_at'] = $data['updated_at'] ?? static::now();
+        $data = static::filterWriteData($data);
+        if (!$data) {
+            return false;
+        }
+        if (static::isKnownField('updated_at')) {
+            $data['updated_at'] = $data['updated_at'] ?? static::now();
+        }
         return static::query()->where('id', $id)->update($data) > 0;
     }
 
@@ -43,6 +56,9 @@ abstract class BaseModel extends Model
 
     public static function countByField(string $field, string|int $value): int
     {
+        if (!static::isKnownField($field)) {
+            return 0;
+        }
         return (int)static::query()->where($field, $value)->count();
     }
 
@@ -51,9 +67,14 @@ abstract class BaseModel extends Model
     {
         $page = max(1, $page);
         $perPage = min(100, max(1, $perPage));
+        $orderBy = static::isKnownField($orderBy) ? $orderBy : 'id';
+        $direction = strtolower($direction) === 'asc' ? 'asc' : 'desc';
         $query = static::query();
         foreach ($filters as $field => $value) {
             if ($value === null || $value === '') {
+                continue;
+            }
+            if (!static::isKnownField((string)$field)) {
                 continue;
             }
             $query->where($field, $value);
@@ -71,5 +92,25 @@ abstract class BaseModel extends Model
             'page' => $page,
             'per_page' => $perPage,
         ];
+    }
+
+    protected static function filterWriteData(array $data): array
+    {
+        $fields = static::fieldMap();
+        unset($data['id']);
+        return array_intersect_key($data, $fields);
+    }
+
+    protected static function isKnownField(string $field): bool
+    {
+        return $field === 'id' || isset(static::fieldMap()[$field]);
+    }
+
+    private static function fieldMap(): array
+    {
+        if (static::$fields === []) {
+            throw new LogicException(static::class . ' must define writable fields.');
+        }
+        return array_flip(static::$fields);
     }
 }

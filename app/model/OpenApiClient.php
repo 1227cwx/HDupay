@@ -6,6 +6,19 @@ class OpenApiClient extends BaseModel
 {
     protected $table = 'open_api_clients';
     protected $primaryKey = 'id';
+    protected static array $fields = [
+        'name',
+        'api_key',
+        'api_secret_hash',
+        'api_secret_encrypted',
+        'callback_url',
+        'ip_whitelist',
+        'status',
+        'last_used_ip',
+        'last_used_at',
+        'created_at',
+        'updated_at',
+    ];
 
     public static function findByApiKey(string $apiKey): ?array
     {

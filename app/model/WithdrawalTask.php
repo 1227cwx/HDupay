@@ -6,6 +6,29 @@ class WithdrawalTask extends BaseModel
 {
     protected $table = 'withdrawal_tasks';
     protected $primaryKey = 'id';
+    protected static array $fields = [
+        'network_code',
+        'token_code',
+        'wallet_account_id',
+        'from_address',
+        'to_address',
+        'amount_int',
+        'status',
+        'gas_funding_tx_hash',
+        'withdraw_tx_hash',
+        'actual_gas_used',
+        'actual_gas_price_wei',
+        'actual_gas_fee_wei',
+        'withdraw_block_number',
+        'current_confirmations',
+        'required_confirmations',
+        'error_message',
+        'retry_count',
+        'max_retry_count',
+        'last_retry_at',
+        'created_at',
+        'updated_at',
+    ];
 
     public const PROCESSABLE_STATUSES = ['pending_withdraw', 'withdraw_failed', 'gas_funding', 'withdrawing', 'manual_required'];
     public const RETRY_STATUSES = ['withdraw_failed', 'manual_required'];

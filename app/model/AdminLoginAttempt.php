@@ -6,6 +6,15 @@ class AdminLoginAttempt extends BaseModel
 {
     protected $table = 'admin_login_attempts';
     protected $primaryKey = 'id';
+    protected static array $fields = [
+        'username',
+        'ip',
+        'failed_count',
+        'locked_until',
+        'last_failed_at',
+        'created_at',
+        'updated_at',
+    ];
 
     public static function findByUsernameIp(string $username, string $ip): ?array
     {

@@ -6,6 +6,29 @@ class CollectionTask extends BaseModel
 {
     protected $table = 'collection_tasks';
     protected $primaryKey = 'id';
+    protected static array $fields = [
+        'network_code',
+        'token_code',
+        'address_id',
+        'from_address',
+        'to_address',
+        'collection_type',
+        'amount_int',
+        'status',
+        'gas_funding_tx_hash',
+        'collect_tx_hash',
+        'actual_gas_used',
+        'actual_gas_price_wei',
+        'actual_gas_fee_wei',
+        'collect_block_number',
+        'current_confirmations',
+        'required_confirmations',
+        'error_message',
+        'retry_count',
+        'last_retry_at',
+        'created_at',
+        'updated_at',
+    ];
     public const PROCESSABLE_STATUSES = ['pending_collect', 'collect_failed', 'gas_funding', 'collecting', 'manual_required'];
     public const RETRY_STATUSES = ['collect_failed', 'manual_required'];
 

@@ -6,6 +6,22 @@ class RpcConfig extends BaseModel
 {
     protected $table = 'rpc_configs';
     protected $primaryKey = 'id';
+    protected static array $fields = [
+        'network_code',
+        'group_id',
+        'name',
+        'provider',
+        'rpc_url',
+        'api_key_cipher',
+        'api_key_masked',
+        'use_api_key_secret',
+        'api_key_secret_cipher',
+        'proxy_id',
+        'enabled',
+        'sort_order',
+        'created_at',
+        'updated_at',
+    ];
 
     public static function allList(): array
     {

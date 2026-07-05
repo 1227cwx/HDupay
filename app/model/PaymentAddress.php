@@ -6,6 +6,22 @@ class PaymentAddress extends BaseModel
 {
     protected $table = 'payment_addresses';
     protected $primaryKey = 'id';
+    protected static array $fields = [
+        'network_code',
+        'token_code',
+        'wallet_account_id',
+        'address',
+        'address_lower',
+        'derivation_path',
+        'address_index',
+        'status',
+        'assigned_order_no',
+        'created_at',
+        'assigned_at',
+        'expired_at',
+        'frozen_at',
+        'updated_at',
+    ];
 
     public static function findAvailable(string $networkCode, string $tokenCode): ?array
     {

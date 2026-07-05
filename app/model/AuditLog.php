@@ -6,6 +6,16 @@ class AuditLog extends BaseModel
 {
     protected $table = 'audit_logs';
     protected $primaryKey = 'id';
+    protected static array $fields = [
+        'admin_id',
+        'action',
+        'target_type',
+        'target_id',
+        'summary',
+        'ip',
+        'created_at',
+        'updated_at',
+    ];
 
     public static function writeLog(string $action, string $summary, string $targetType = '', int $targetId = 0, int $adminId = 0, string $ip = ''): array
     {

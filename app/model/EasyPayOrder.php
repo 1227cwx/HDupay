@@ -6,6 +6,26 @@ class EasyPayOrder extends BaseModel
 {
     protected $table = 'easypay_orders';
     protected $primaryKey = 'id';
+    protected static array $fields = [
+        'api_client_id',
+        'api_secret_encrypted',
+        'epay_order_no',
+        'out_trade_no',
+        'deposit_order_no',
+        'name',
+        'money',
+        'notify_url',
+        'return_url',
+        'request_params',
+        'status',
+        'notify_status',
+        'notify_count',
+        'notify_response',
+        'notify_error',
+        'last_notified_at',
+        'created_at',
+        'updated_at',
+    ];
 
     public static function findByEpayOrderNo(string $epayOrderNo): ?array
     {
