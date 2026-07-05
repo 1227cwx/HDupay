@@ -7,6 +7,7 @@ use RuntimeException;
 class CryptoService
 {
     private const PREFIX = 'v1:';
+    private static ?string $cachedKey = null;
 
     public function encrypt(?string $plain): string
     {
@@ -60,14 +61,21 @@ class CryptoService
 
     private function key(): string
     {
+        if (self::$cachedKey !== null) {
+            return self::$cachedKey;
+        }
+
         $value = getenv('WALLET_ENCRYPTION_KEY') ?: $this->envFileValue('WALLET_ENCRYPTION_KEY');
         if ($value === '') {
             throw new RuntimeException('服务器未配置 WALLET_ENCRYPTION_KEY，请在服务器环境变量或 .env 文件中配置，禁止提交到 GitHub');
         }
         if (ctype_xdigit($value) && strlen($value) >= 64) {
-            return substr(hex2bin(substr($value, 0, 64)), 0, SODIUM_CRYPTO_SECRETBOX_KEYBYTES);
+            self::$cachedKey = substr(hex2bin(substr($value, 0, 64)), 0, SODIUM_CRYPTO_SECRETBOX_KEYBYTES);
+            return self::$cachedKey;
         }
-        return hash('sha256', $value, true);
+
+        self::$cachedKey = hash('sha256', $value, true);
+        return self::$cachedKey;
     }
 
     private function envFileValue(string $key): string
