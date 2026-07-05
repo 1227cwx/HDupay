@@ -33,23 +33,23 @@ class EvmMonitorService
         }
 
         $expired = $this->freezeExpiredOrders($networkCode);
-        $activeMonitorCount = PaymentAddress::activeMonitorCount($networkCode);
+        $waitingCount = DepositOrder::waitingCount($networkCode);
         $confirmingCount = DepositOrder::confirmingCount($networkCode);
-        if ($activeMonitorCount <= 0 && $confirmingCount <= 0) {
+        if ($waitingCount <= 0 && $confirmingCount <= 0) {
             return ['network' => $networkCode, 'skipped' => '当前网络没有待监听订单', 'expired_frozen' => $expired, 'confirmed' => 0, 'idle' => true];
         }
 
         $latest = $rpc->getBlockNumber($networkCode);
         RpcNetworkSetting::markMonitorAt($networkCode);
         $confirmed = $this->updateConfirmingOrders($networkCode, $latest);
-        $activeMonitorCount = PaymentAddress::activeMonitorCount($networkCode);
-        if ($activeMonitorCount <= 0) {
-            return ['network' => $networkCode, 'skipped' => '当前网络没有待监听地址', 'expired_frozen' => $expired, 'confirmed' => $confirmed];
+        $waitingCount = DepositOrder::waitingCount($networkCode);
+        if ($waitingCount <= 0) {
+            return ['network' => $networkCode, 'skipped' => '当前网络没有待监听订单', 'expired_frozen' => $expired, 'confirmed' => $confirmed];
         }
 
         $tokenCodes = array_values(array_unique(array_map(
             static fn($tokenCode) => strtoupper((string)$tokenCode),
-            PaymentAddress::activeTokenCodes($networkCode)
+            DepositOrder::waitingTokenCodes($networkCode)
         )));
         if (!$tokenCodes) {
             return ['network' => $networkCode, 'skipped' => '当前网络没有待监听代币', 'expired_frozen' => $expired, 'confirmed' => $confirmed];
@@ -96,6 +96,7 @@ class EvmMonitorService
         }
 
         $latest = $rpc->getBlockNumber($networkCode);
+        $listenFromBlock = max(0, $latest);
         $tokenCode = strtoupper($tokenCode);
         $token = $rpc->tokenConfig($networkCode, $tokenCode);
         $cursor = MonitorCursor::getOrCreate(
@@ -105,11 +106,18 @@ class EvmMonitorService
             (int)$cfg['confirm_blocks'],
             (int)$cfg['scan_step_blocks']
         );
-        if ((int)($cursor['last_scanned_block'] ?? 0) < $latest) {
-            MonitorCursor::updateBlock((int)$cursor['id'], $latest);
+
+        $targetCursorBlock = max(0, $listenFromBlock - 1);
+        if (DepositOrder::waitingCountByToken($networkCode, $tokenCode) <= 0 || (int)($cursor['last_scanned_block'] ?? 0) > $targetCursorBlock) {
+            MonitorCursor::ensureBlockBefore((int)$cursor['id'], $targetCursorBlock);
         }
 
-        return ['network' => $networkCode, 'token' => $tokenCode, 'latest' => $latest];
+        return [
+            'network' => $networkCode,
+            'token' => $tokenCode,
+            'latest' => $latest,
+            'listen_from_block' => $listenFromBlock,
+        ];
     }
 
     private function scanToken(EvmRpcService $rpc, string $networkCode, string $tokenCode, int $latest, array $cfg): array
@@ -117,34 +125,33 @@ class EvmMonitorService
         $token = $rpc->tokenConfig($networkCode, $tokenCode);
         $contractAddress = (string)$token['contract_address'];
         $cursor = MonitorCursor::getOrCreate($networkCode, $tokenCode, $contractAddress, (int)$cfg['confirm_blocks'], (int)$cfg['scan_step_blocks']);
+        $minListenFromBlock = DepositOrder::minWaitingListenFromBlock($networkCode, $tokenCode);
+        if ($minListenFromBlock <= 0 && DepositOrder::waitingCountByToken($networkCode, $tokenCode) <= 0) {
+            return ['token' => $tokenCode, 'latest' => $latest, 'scanned' => 0, 'logs' => 0, 'matched' => 0, 'note' => '未找到待监听订单'];
+        }
+
         if ((int)$cursor['last_scanned_block'] === 0) {
-            $from = max(0, $latest - (int)$cfg['scan_step_blocks'] + 1);
+            $from = max(0, $minListenFromBlock);
         } else {
             $from = (int)$cursor['last_scanned_block'] + 1;
+            if ($from < $minListenFromBlock) {
+                $from = $minListenFromBlock;
+            }
         }
         if ($from > $latest) {
             return ['token' => $tokenCode, 'latest' => $latest, 'scanned' => 0, 'logs' => 0, 'matched' => 0];
         }
         $to = min($from + (int)$cfg['scan_step_blocks'] - 1, $latest);
-        $addresses = PaymentAddress::assignedAddressesByToken($networkCode, $tokenCode, 100);
-        if (!$addresses) {
-            MonitorCursor::updateBlock((int)$cursor['id'], $to);
-            return ['token' => $tokenCode, 'from' => $from, 'to' => $to, 'logs' => 0, 'matched' => 0, 'note' => '未找到待监听地址'];
-        }
 
         $decoder = new EvmLogDecoderService();
+        $filter = $decoder->filterFor($contractAddress, $from, $to);
+        $logs = $rpc->getLogs($networkCode, $filter);
         $matched = 0;
-        $logsCount = 0;
-        foreach (array_chunk(array_column($addresses, 'address_lower'), 50) as $chunk) {
-            $filter = $decoder->filterFor($contractAddress, $from, $to, $chunk);
-            $logs = $rpc->getLogs($networkCode, $filter);
-            $logsCount += count($logs);
-            foreach ($logs as $log) {
-                $matched += $this->handleLog($rpc, $networkCode, $tokenCode, $log, $latest) ? 1 : 0;
-            }
+        foreach ($logs as $log) {
+            $matched += $this->handleLog($rpc, $networkCode, $tokenCode, $log, $latest) ? 1 : 0;
         }
         MonitorCursor::updateBlock((int)$cursor['id'], $to);
-        return ['token' => $tokenCode, 'latest' => $latest, 'from' => $from, 'to' => $to, 'logs' => $logsCount, 'matched' => $matched];
+        return ['token' => $tokenCode, 'latest' => $latest, 'from' => $from, 'to' => $to, 'logs' => count($logs), 'matched' => $matched];
     }
 
     private function isScanCaughtUp(array $tokenResults, int $latest): bool
@@ -203,15 +210,21 @@ class EvmMonitorService
         if (!$decoded || DepositOrder::existsLog($networkCode, $decoded['tx_hash'], (int)$decoded['log_index'])) {
             return false;
         }
-        $address = PaymentAddress::findAssignedByAddress($networkCode, $decoded['to_address'], $tokenCode);
+        $order = DepositOrder::findWaitingByAddressToken($networkCode, $tokenCode, $decoded['to_address']);
+        if (!$order) {
+            return false;
+        }
+        if ((int)$decoded['block_number'] < (int)($order['listen_from_block'] ?? 0)) {
+            return false;
+        }
+        $address = !empty($order['address_id']) ? PaymentAddress::findById((int)$order['address_id']) : null;
         if (!$address) {
             return false;
         }
-        $order = DepositOrder::findByOrderNo((string)$address['assigned_order_no']);
-        if (!$order || ($order['status'] ?? '') !== 'waiting') {
+        if (strtoupper((string)($order['token_code'] ?? '')) !== $tokenCode || strtoupper((string)($address['token_code'] ?? '')) !== $tokenCode) {
             return false;
         }
-        if (strtoupper((string)($order['token_code'] ?? '')) !== $tokenCode || strtoupper((string)($address['token_code'] ?? '')) !== $tokenCode) {
+        if (strtolower((string)($order['address'] ?? '')) !== strtolower((string)$decoded['to_address'])) {
             return false;
         }
         if (!$this->isPaidBeforeExpire($rpc, $networkCode, (int)$decoded['block_number'], $order)) {

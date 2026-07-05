@@ -35,6 +35,7 @@ class DepositOrder extends BaseModel
         'tx_block_number',
         'from_address',
         'to_address',
+        'listen_from_block',
         'required_confirmations',
         'current_confirmations',
         'created_at',
@@ -140,6 +141,55 @@ class DepositOrder extends BaseModel
             ->where('status', 'confirming')
             ->where('tx_hash', '<>', '')
             ->count();
+    }
+
+    public static function waitingCount(string $networkCode): int
+    {
+        return (int)self::query()
+            ->where('network_code', $networkCode)
+            ->where('status', 'waiting')
+            ->count();
+    }
+
+    public static function waitingCountByToken(string $networkCode, string $tokenCode): int
+    {
+        return (int)self::query()
+            ->where('network_code', $networkCode)
+            ->where('token_code', strtoupper($tokenCode))
+            ->where('status', 'waiting')
+            ->count();
+    }
+
+    public static function waitingTokenCodes(string $networkCode): array
+    {
+        return self::query()
+            ->where('network_code', $networkCode)
+            ->where('status', 'waiting')
+            ->groupBy('token_code')
+            ->pluck('token_code')
+            ->map(fn($tokenCode) => strtoupper((string)$tokenCode))
+            ->toArray();
+    }
+
+    public static function minWaitingListenFromBlock(string $networkCode, string $tokenCode): int
+    {
+        return (int)(self::query()
+            ->where('network_code', $networkCode)
+            ->where('token_code', strtoupper($tokenCode))
+            ->where('status', 'waiting')
+            ->min('listen_from_block') ?: 0);
+    }
+
+    public static function findWaitingByAddressToken(string $networkCode, string $tokenCode, string $address): ?array
+    {
+        $row = self::query()
+            ->where('network_code', $networkCode)
+            ->where('token_code', strtoupper($tokenCode))
+            ->where('address', strtolower($address))
+            ->where('status', 'waiting')
+            ->orderBy('id')
+            ->first();
+        return $row ? $row->toArray() : null;
     }
 
     public static function markDetected(int $id, array $data): bool

@@ -56,7 +56,8 @@ class DepositService
         $rpc = new EvmRpcService();
         $token = $rpc->tokenConfig($networkCode, $tokenCode);
         $requiredConfirmations = $this->requiredConfirmationsForAmount($rpc, $networkCode, (string)$quote['amount_int'], (int)($token['decimals'] ?? 6));
-        (new EvmMonitorService())->prepareCursorForOrder($networkCode, $tokenCode);
+        $monitor = (new EvmMonitorService())->prepareCursorForOrder($networkCode, $tokenCode);
+        $listenFromBlock = (int)($monitor['listen_from_block'] ?? 0);
         if ($quote['amount_int'] === '0') {
             throw new InvalidArgumentException('交易金额必须大于 0');
         }
@@ -74,6 +75,7 @@ class DepositService
             $input,
             $quote,
             $requiredConfirmations,
+            $listenFromBlock,
             $returnUrl,
             $baseUrl,
             $epayOrderNo
@@ -106,6 +108,7 @@ class DepositService
                 'address_id' => $address['id'],
                 'address' => strtolower($address['address_lower']),
                 'to_address' => strtolower($address['address_lower']),
+                'listen_from_block' => $listenFromBlock,
                 'required_confirmations' => $requiredConfirmations,
                 'current_confirmations' => 0,
                 'status' => 'waiting',

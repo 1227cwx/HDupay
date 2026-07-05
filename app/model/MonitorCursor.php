@@ -54,4 +54,19 @@ class MonitorCursor extends BaseModel
     {
         return self::updateById($id, ['last_scanned_block' => $blockNumber]);
     }
+
+    public static function ensureBlockBefore(int $id, int $blockNumber): bool
+    {
+        $blockNumber = max(0, $blockNumber);
+        return self::query()
+            ->where('id', $id)
+            ->where(function ($query) use ($blockNumber) {
+                $query->where('last_scanned_block', 0)
+                    ->orWhere('last_scanned_block', '>', $blockNumber);
+            })
+            ->update([
+                'last_scanned_block' => $blockNumber,
+                'updated_at' => self::now(),
+            ]) > 0;
+    }
 }
