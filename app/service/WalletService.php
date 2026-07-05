@@ -71,7 +71,7 @@ class WalletService
                 'addresses_available' => $totalAddressStats['available'],
                 'addresses_assigned' => $totalAddressStats['assigned'],
                 'addresses_frozen' => $totalAddressStats['frozen'] + $totalAddressStats['collected'],
-                'collections_pending' => $totalCollectionStats['pending_collect'] + $totalCollectionStats['gas_funding'] + $totalCollectionStats['collecting'],
+                'collections_pending' => $totalCollectionStats['pending_collect'] + $totalCollectionStats['processing'] + $totalCollectionStats['gas_funding'] + $totalCollectionStats['collecting'],
                 'collections_done' => $totalCollectionStats['collected'],
             ],
         ];
@@ -447,6 +447,7 @@ class WalletService
     {
         return [
             'pending_collect' => 0,
+            'processing' => 0,
             'gas_funding' => 0,
             'collecting' => 0,
             'collected' => 0,

@@ -31,6 +31,8 @@ class CollectionTask extends BaseModel
     ];
     public const PROCESSABLE_STATUSES = ['pending_collect', 'collect_failed', 'gas_funding', 'collecting', 'manual_required'];
     public const RETRY_STATUSES = ['collect_failed', 'manual_required'];
+    public const CLAIMABLE_STATUSES = ['pending_collect', 'collect_failed', 'manual_required'];
+    public const BLOCKING_STATUSES = ['pending_collect', 'gas_funding', 'collecting', 'processing'];
 
     public static function findPending(int $limit = 20): array
     {
@@ -142,6 +144,103 @@ class CollectionTask extends BaseModel
     public static function shouldCountRetry(string $status): bool
     {
         return in_array($status, self::RETRY_STATUSES, true);
+    }
+
+    public static function isClaimableStatus(string $status): bool
+    {
+        return in_array($status, self::CLAIMABLE_STATUSES, true);
+    }
+
+    public static function claimForProcessing(int $id, string $status, bool $manual, int $maxRetryCount = 3): bool
+    {
+        if (!self::isClaimableStatus($status)) {
+            return true;
+        }
+
+        $query = self::query()
+            ->where('id', $id)
+            ->where('status', $status);
+        if (!$manual && self::shouldCountRetry($status)) {
+            $query->where('retry_count', '<', max(0, $maxRetryCount));
+        }
+
+        return $query->update([
+            'status' => 'processing',
+            'updated_at' => self::now(),
+        ]) > 0;
+    }
+
+    public static function restoreProcessingStatus(int $id, string $status): bool
+    {
+        if (!in_array($status, self::PROCESSABLE_STATUSES, true)) {
+            return false;
+        }
+
+        return self::query()
+            ->where('id', $id)
+            ->where('status', 'processing')
+            ->update([
+                'status' => $status,
+                'updated_at' => self::now(),
+            ]) > 0;
+    }
+
+    public static function hasEarlierBlockingTask(array $task, int $maxRetryCount = 3): bool
+    {
+        $id = (int)($task['id'] ?? 0);
+        $networkCode = (string)($task['network_code'] ?? '');
+        $tokenCode = strtoupper((string)($task['token_code'] ?? ''));
+        if ($id <= 0 || $networkCode === '' || $tokenCode === '') {
+            return false;
+        }
+
+        $maxRetryCount = max(0, $maxRetryCount);
+        return self::query()
+            ->where('network_code', $networkCode)
+            ->where('token_code', $tokenCode)
+            ->where('id', '<', $id)
+            ->where(function ($query) use ($maxRetryCount) {
+                $query->whereIn('status', self::BLOCKING_STATUSES)
+                    ->orWhere(function ($subQuery) use ($maxRetryCount) {
+                        $subQuery->whereIn('status', self::RETRY_STATUSES)
+                            ->where('retry_count', '<', $maxRetryCount);
+                    });
+            })
+            ->exists();
+    }
+
+    public static function acquireNetworkTokenLock(string $networkCode, string $tokenCode): bool
+    {
+        $row = self::query()
+            ->getConnection()
+            ->selectOne('SELECT GET_LOCK(?, 0) AS locked', [self::networkTokenLockName($networkCode, $tokenCode)]);
+        return (int)self::dbValue($row, 'locked') === 1;
+    }
+
+    public static function releaseNetworkTokenLock(string $networkCode, string $tokenCode): void
+    {
+        try {
+            self::query()
+                ->getConnection()
+                ->selectOne('SELECT RELEASE_LOCK(?) AS released', [self::networkTokenLockName($networkCode, $tokenCode)]);
+        } catch (\Throwable) {
+        }
+    }
+
+    private static function networkTokenLockName(string $networkCode, string $tokenCode): string
+    {
+        return 'hdupay:collection:' . sha1(strtolower($networkCode) . ':' . strtoupper($tokenCode));
+    }
+
+    private static function dbValue(mixed $row, string $key): mixed
+    {
+        if (is_array($row)) {
+            return $row[$key] ?? null;
+        }
+        if (is_object($row)) {
+            return $row->{$key} ?? null;
+        }
+        return null;
     }
 
     public static function saveCollectConfirmation(

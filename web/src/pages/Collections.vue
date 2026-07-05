@@ -99,6 +99,7 @@ const collectionConfig = reactive({ auto_collect_interval_seconds: 10, auto_coll
 const networkOptions = shortNetworkOptions
 const statusOptions = [
   { label: '待归集', value: 'pending_collect' },
+  { label: '处理中', value: 'processing' },
   { label: '补充 Gas 中', value: 'gas_funding' },
   { label: '归集中', value: 'collecting' },
   { label: '已归集', value: 'collected' },
@@ -236,6 +237,7 @@ function canProcess(status: string) {
 function statusText(status: string) {
   const map: Record<string, string> = {
     pending_collect: '待归集',
+    processing: '处理中',
     gas_funding: '补充 Gas 中',
     collecting: '归集中',
     collected: '已归集',
@@ -248,7 +250,7 @@ function statusText(status: string) {
 function statusType(status: string) {
   if (status === 'collected') return 'success'
   if (status === 'collect_failed' || status === 'manual_required') return 'error'
-  if (status === 'gas_funding' || status === 'collecting') return 'warning'
+  if (status === 'processing' || status === 'gas_funding' || status === 'collecting') return 'warning'
   return 'info'
 }
 

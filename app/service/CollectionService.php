@@ -102,7 +102,7 @@ class CollectionService
             if (!$task) {
                 continue;
             }
-            $results[] = $this->processWithFailureHandling($task);
+            $results[] = $this->processWithFailureHandling($task, false, true);
         }
         return $results;
     }
@@ -116,7 +116,7 @@ class CollectionService
         if (($task['status'] ?? '') !== 'collect_failed') {
             throw new RuntimeException('只有归集失败的记录才允许手动重新归集');
         }
-        return $this->processWithFailureHandling($task, true);
+        return $this->processWithFailureHandling($task, true, true);
     }
 
     private function processTasks(array $tasks): array
@@ -128,20 +128,73 @@ class CollectionService
         return $results;
     }
 
-    private function processWithFailureHandling(array $task, bool $throwOnFailure = false): array
+    private function processWithFailureHandling(array $task, bool $throwOnFailure = false, bool $manual = false): array
     {
-        if (CollectionTask::shouldCountRetry((string)$task['status'])) {
-            CollectionTask::markRetryAttempt((int)$task['id']);
+        $taskId = (int)($task['id'] ?? 0);
+        $originalStatus = (string)($task['status'] ?? '');
+        $networkCode = (string)($task['network_code'] ?? '');
+        $tokenCode = strtoupper((string)($task['token_code'] ?? ''));
+        $maxRetryCount = $this->autoCollectMaxRetryCount();
+        $lockAcquired = CollectionTask::acquireNetworkTokenLock($networkCode, $tokenCode);
+        if (!$lockAcquired) {
+            if ($throwOnFailure) {
+                throw new RuntimeException('同网络同代币归集任务正在处理，请稍后再试');
+            }
+            return [
+                'task_id' => $taskId,
+                'ok' => true,
+                'skipped' => true,
+                'reason' => 'network_token_locked',
+            ];
         }
 
+        $claimed = false;
         try {
-            return $this->processOne($task);
-        } catch (Throwable $e) {
-            CollectionTask::mark((int)$task['id'], 'collect_failed', ['error_message' => $e->getMessage()]);
-            if ($throwOnFailure) {
-                throw $e;
+            if (CollectionTask::hasEarlierBlockingTask($task, $maxRetryCount)) {
+                if ($throwOnFailure) {
+                    throw new RuntimeException('同网络同代币已有更早的归集任务未完成，请稍后再试');
+                }
+                return [
+                    'task_id' => $taskId,
+                    'ok' => true,
+                    'skipped' => true,
+                    'reason' => 'network_token_busy',
+                ];
             }
-            return ['task_id' => $task['id'], 'ok' => false, 'error' => $e->getMessage()];
+
+            if (CollectionTask::isClaimableStatus($originalStatus)) {
+                $claimed = CollectionTask::claimForProcessing($taskId, $originalStatus, $manual, $maxRetryCount);
+                if (!$claimed) {
+                    if ($throwOnFailure) {
+                        throw new RuntimeException('归集任务已被其他进程处理，请刷新后重试');
+                    }
+                    return [
+                        'task_id' => $taskId,
+                        'ok' => true,
+                        'skipped' => true,
+                        'reason' => 'claim_failed',
+                    ];
+                }
+                if (CollectionTask::shouldCountRetry($originalStatus)) {
+                    CollectionTask::markRetryAttempt($taskId);
+                }
+            }
+
+            try {
+                $result = $this->processOne($task);
+                if ($claimed) {
+                    CollectionTask::restoreProcessingStatus($taskId, $originalStatus);
+                }
+                return $result;
+            } catch (Throwable $e) {
+                CollectionTask::mark($taskId, 'collect_failed', ['error_message' => $e->getMessage()]);
+                if ($throwOnFailure) {
+                    throw $e;
+                }
+                return ['task_id' => $taskId, 'ok' => false, 'error' => $e->getMessage()];
+            }
+        } finally {
+            CollectionTask::releaseNetworkTokenLock($networkCode, $tokenCode);
         }
     }
 
@@ -154,6 +207,16 @@ class CollectionService
         }
         if ($task['status'] === 'collecting') {
             return $this->checkCollecting($task, $rpc);
+        }
+        if (!empty($task['collect_tx_hash'])) {
+            CollectionTask::mark((int)$task['id'], 'collecting');
+            $task['status'] = 'collecting';
+            return $this->checkCollecting($task, $rpc);
+        }
+        if (!empty($task['gas_funding_tx_hash'])) {
+            CollectionTask::mark((int)$task['id'], 'gas_funding');
+            $task['status'] = 'gas_funding';
+            return $this->checkGasFunding($task, $rpc);
         }
         $cfg = $rpc->runtimeConfig($networkCode);
         $tokenCode = strtoupper((string)($task['token_code'] ?? 'USDC'));
