@@ -17,6 +17,12 @@ class NetworkToken extends BaseModel
         'updated_at',
     ];
 
+    protected static array $filterFields = [
+        'network_code',
+        'token_code',
+        'status',
+    ];
+
     public static function findByNetworkToken(string $networkCode, string $tokenCode): ?array
     {
         $row = self::query()

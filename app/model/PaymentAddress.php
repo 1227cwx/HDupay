@@ -23,6 +23,13 @@ class PaymentAddress extends BaseModel
         'updated_at',
     ];
 
+    protected static array $filterFields = [
+        'network_code',
+        'token_code',
+        'wallet_account_id',
+        'status',
+    ];
+
     public static function findAvailable(string $networkCode, string $tokenCode): ?array
     {
         $row = self::query()

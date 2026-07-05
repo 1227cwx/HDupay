@@ -15,6 +15,10 @@ class WalletMaster extends BaseModel
         'updated_at',
     ];
 
+    protected static array $filterFields = [
+        'status',
+    ];
+
     public static function latestActive(): ?array
     {
         $row = self::query()->where('status', 'active')->orderByDesc('id')->first();

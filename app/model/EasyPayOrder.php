@@ -27,6 +27,15 @@ class EasyPayOrder extends BaseModel
         'updated_at',
     ];
 
+    protected static array $filterFields = [
+        'api_client_id',
+        'epay_order_no',
+        'out_trade_no',
+        'deposit_order_no',
+        'status',
+        'notify_status',
+    ];
+
     public static function findByEpayOrderNo(string $epayOrderNo): ?array
     {
         $row = self::query()->where('epay_order_no', $epayOrderNo)->first();

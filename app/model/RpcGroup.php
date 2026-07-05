@@ -16,6 +16,11 @@ class RpcGroup extends BaseModel
         'updated_at',
     ];
 
+    protected static array $filterFields = [
+        'network_code',
+        'rotation_mode',
+    ];
+
     public static function allList(): array
     {
         return self::query()->orderBy('network_code')->orderBy('id')->get()->toArray();

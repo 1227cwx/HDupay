@@ -22,6 +22,11 @@ class RpcNetworkSetting extends BaseModel
         'updated_at',
     ];
 
+    protected static array $filterFields = [
+        'network_code',
+        'enabled',
+    ];
+
     public static function findByNetwork(string $networkCode): ?array
     {
         $row = self::query()->where('network_code', $networkCode)->first();

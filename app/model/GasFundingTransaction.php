@@ -17,6 +17,14 @@ class GasFundingTransaction extends BaseModel
         'updated_at',
     ];
 
+    protected static array $filterFields = [
+        'network_code',
+        'from_address',
+        'to_address',
+        'status',
+        'tx_hash',
+    ];
+
     public static function markByTxHash(string $txHash, string $status): bool
     {
         if (!in_array($status, ['sent', 'success', 'failed'], true)) {

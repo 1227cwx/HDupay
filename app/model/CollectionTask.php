@@ -29,6 +29,14 @@ class CollectionTask extends BaseModel
         'created_at',
         'updated_at',
     ];
+
+    protected static array $filterFields = [
+        'network_code',
+        'token_code',
+        'address_id',
+        'status',
+        'collection_type',
+    ];
     public const PROCESSABLE_STATUSES = ['pending_collect', 'collect_failed', 'gas_funding', 'collecting', 'manual_required'];
     public const RETRY_STATUSES = ['collect_failed', 'manual_required'];
     public const CLAIMABLE_STATUSES = ['pending_collect', 'collect_failed', 'manual_required'];

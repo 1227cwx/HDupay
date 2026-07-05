@@ -24,6 +24,15 @@ class WalletCollectionAddress extends BaseModel
         'updated_at',
     ];
 
+    protected static array $filterFields = [
+        'wallet_account_id',
+        'network_code',
+        'address_type',
+        'is_active',
+        'sync_enabled',
+        'sync_status',
+    ];
+
     public static function listAll(): array
     {
         return self::query()->orderBy('network_code')->orderBy('wallet_account_id')->orderBy('id')->get()->toArray();

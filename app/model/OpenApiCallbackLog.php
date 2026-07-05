@@ -21,6 +21,12 @@ class OpenApiCallbackLog extends BaseModel
         'updated_at',
     ];
 
+    protected static array $filterFields = [
+        'client_id',
+        'order_no',
+        'status',
+    ];
+
     public static function findByClientAndOrder(int $clientId, string $orderNo): ?array
     {
         $row = self::query()

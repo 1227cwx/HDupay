@@ -30,6 +30,13 @@ class WithdrawalTask extends BaseModel
         'updated_at',
     ];
 
+    protected static array $filterFields = [
+        'network_code',
+        'token_code',
+        'wallet_account_id',
+        'status',
+    ];
+
     public const PROCESSABLE_STATUSES = ['pending_withdraw', 'withdraw_failed', 'gas_funding', 'withdrawing', 'manual_required'];
     public const RETRY_STATUSES = ['withdraw_failed', 'manual_required'];
     public const CLAIMABLE_STATUSES = ['pending_withdraw', 'withdraw_failed', 'manual_required'];

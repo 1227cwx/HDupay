@@ -43,6 +43,16 @@ class DepositOrder extends BaseModel
         'updated_at',
     ];
 
+    protected static array $filterFields = [
+        'network_code',
+        'status',
+        'source',
+        'token_code',
+        'fiat_currency',
+        'api_client_id',
+        'address_id',
+    ];
+
     public static function findByOrderNo(string $orderNo): ?array
     {
         $row = self::query()->where('order_no', $orderNo)->first();

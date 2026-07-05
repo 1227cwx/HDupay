@@ -16,6 +16,11 @@ class AdminLoginAttempt extends BaseModel
         'updated_at',
     ];
 
+    protected static array $filterFields = [
+        'username',
+        'ip',
+    ];
+
     public static function findByUsernameIp(string $username, string $ip): ?array
     {
         $row = self::query()->where('username', $username)->where('ip', $ip)->first();

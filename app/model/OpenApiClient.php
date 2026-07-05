@@ -20,6 +20,10 @@ class OpenApiClient extends BaseModel
         'updated_at',
     ];
 
+    protected static array $filterFields = [
+        'status',
+    ];
+
     public static function findByApiKey(string $apiKey): ?array
     {
         $row = self::query()->where('api_key', $apiKey)->first();

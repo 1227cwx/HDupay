@@ -15,6 +15,11 @@ class Token extends BaseModel
         'updated_at',
     ];
 
+    protected static array $filterFields = [
+        'code',
+        'status',
+    ];
+
     public static function findByCode(string $code): ?array
     {
         $row = self::query()->where('code', strtoupper($code))->first();

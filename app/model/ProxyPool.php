@@ -22,6 +22,11 @@ class ProxyPool extends BaseModel
         'updated_at',
     ];
 
+    protected static array $filterFields = [
+        'proxy_type',
+        'status',
+    ];
+
     public static function enabledList(): array
     {
         return self::query()

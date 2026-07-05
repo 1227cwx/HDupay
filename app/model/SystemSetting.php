@@ -13,6 +13,10 @@ class SystemSetting extends BaseModel
         'updated_at',
     ];
 
+    protected static array $filterFields = [
+        'key_name',
+    ];
+
     public static function getValue(string $key, string $default = ''): string
     {
         $row = self::query()->where('key_name', $key)->first();

@@ -18,6 +18,11 @@ class MonitorCursor extends BaseModel
         'updated_at',
     ];
 
+    protected static array $filterFields = [
+        'network_code',
+        'token_code',
+    ];
+
     public static function getOrCreate(string $networkCode, string $tokenCode, string $contractAddress, int $confirmBlocks, int $scanStepBlocks): array
     {
         $row = self::query()->where('network_code', $networkCode)->where('token_code', $tokenCode)->first();

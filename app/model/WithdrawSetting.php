@@ -21,6 +21,14 @@ class WithdrawSetting extends BaseModel
         'updated_at',
     ];
 
+    protected static array $filterFields = [
+        'wallet_account_id',
+        'network_code',
+        'token_code',
+        'enabled',
+        'status',
+    ];
+
     public static function findByAccountToken(int $walletAccountId, string $tokenCode): ?array
     {
         $row = self::query()

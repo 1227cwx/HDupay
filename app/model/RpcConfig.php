@@ -23,6 +23,14 @@ class RpcConfig extends BaseModel
         'updated_at',
     ];
 
+    protected static array $filterFields = [
+        'network_code',
+        'group_id',
+        'provider',
+        'proxy_id',
+        'enabled',
+    ];
+
     public static function allList(): array
     {
         return self::query()->orderBy('network_code')->orderBy('group_id')->orderBy('sort_order')->orderBy('id')->get()->toArray();

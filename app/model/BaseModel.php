@@ -9,6 +9,7 @@ abstract class BaseModel extends Model
 {
     protected $guarded = ['*'];
     protected static array $fields = [];
+    protected static array $filterFields = [];
     public $timestamps = false;
 
     protected static function now(): string
@@ -70,11 +71,12 @@ abstract class BaseModel extends Model
         $orderBy = static::isKnownField($orderBy) ? $orderBy : 'id';
         $direction = strtolower($direction) === 'asc' ? 'asc' : 'desc';
         $query = static::query();
+        $filterFields = static::filterFieldMap();
         foreach ($filters as $field => $value) {
             if ($value === null || $value === '') {
                 continue;
             }
-            if (!static::isKnownField((string)$field)) {
+            if (!isset($filterFields[(string)$field])) {
                 continue;
             }
             $query->where($field, $value);
@@ -112,5 +114,10 @@ abstract class BaseModel extends Model
             throw new LogicException(static::class . ' must define writable fields.');
         }
         return array_flip(static::$fields);
+    }
+
+    private static function filterFieldMap(): array
+    {
+        return array_flip(static::$filterFields);
     }
 }

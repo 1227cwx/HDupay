@@ -23,6 +23,14 @@ class FiatExchangeRate extends BaseModel
         'updated_at',
     ];
 
+    protected static array $filterFields = [
+        'token_code',
+        'fiat_currency',
+        'auto_update',
+        'provider',
+        'status',
+    ];
+
     public static function findByTokenCurrency(string $tokenCode, string $fiatCurrency): ?array
     {
         $row = self::query()

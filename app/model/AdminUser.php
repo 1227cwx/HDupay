@@ -16,6 +16,11 @@ class AdminUser extends BaseModel
         'updated_at',
     ];
 
+    protected static array $filterFields = [
+        'username',
+        'status',
+    ];
+
     public static function findByUsername(string $username): ?array
     {
         $row = self::query()->where('username', $username)->first();

@@ -30,6 +30,14 @@ class WalletAccount extends BaseModel
         'updated_at',
     ];
 
+    protected static array $filterFields = [
+        'wallet_master_id',
+        'network_code',
+        'status',
+        'gas_sync_enabled',
+        'gas_sync_status',
+    ];
+
     public static function findByNetwork(string $networkCode): ?array
     {
         $row = self::query()->where('network_code', $networkCode)->where('status', 'active')->orderByDesc('id')->first();

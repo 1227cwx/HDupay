@@ -17,6 +17,14 @@ class AuditLog extends BaseModel
         'updated_at',
     ];
 
+    protected static array $filterFields = [
+        'admin_id',
+        'action',
+        'target_type',
+        'target_id',
+        'ip',
+    ];
+
     public static function writeLog(string $action, string $summary, string $targetType = '', int $targetId = 0, int $adminId = 0, string $ip = ''): array
     {
         return self::createRecord([
