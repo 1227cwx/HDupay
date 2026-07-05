@@ -25,8 +25,6 @@ Route::disableDefaultRoute();
 /*
  * Admin frontend SPA routes.
  */
-Route::get('/', [IndexController::class, 'index'])->middleware(PublicDomainMiddleware::class);
-Route::get('/login', [IndexController::class, 'index'])->middleware(PublicDomainMiddleware::class);
 Route::group('/hdupay', function () {
     Route::get('', [IndexController::class, 'index']);
     Route::get('/login', [IndexController::class, 'index']);
