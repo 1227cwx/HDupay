@@ -36,6 +36,7 @@ class DepositOrder extends BaseModel
         'from_address',
         'to_address',
         'listen_from_block',
+        'listen_scanned_block',
         'required_confirmations',
         'current_confirmations',
         'created_at',
@@ -171,25 +172,32 @@ class DepositOrder extends BaseModel
             ->toArray();
     }
 
-    public static function minWaitingListenFromBlock(string $networkCode, string $tokenCode): int
+    public static function waitingScanOrders(string $networkCode, string $tokenCode): array
     {
-        return (int)(self::query()
+        return self::query()
             ->where('network_code', $networkCode)
             ->where('token_code', strtoupper($tokenCode))
             ->where('status', 'waiting')
-            ->min('listen_from_block') ?: 0);
+            ->orderBy('listen_scanned_block')
+            ->orderBy('id')
+            ->get()
+            ->toArray();
     }
 
-    public static function findWaitingByAddressToken(string $networkCode, string $tokenCode, string $address): ?array
+    public static function markScannedByIds(array $ids, int $blockNumber): int
     {
-        $row = self::query()
-            ->where('network_code', $networkCode)
-            ->where('token_code', strtoupper($tokenCode))
-            ->where('address', strtolower($address))
-            ->where('status', 'waiting')
-            ->orderBy('id')
-            ->first();
-        return $row ? $row->toArray() : null;
+        $ids = array_values(array_filter(array_unique(array_map('intval', $ids))));
+        if (!$ids) {
+            return 0;
+        }
+        $blockNumber = max(0, $blockNumber);
+        return self::query()
+            ->whereIn('id', $ids)
+            ->where('listen_scanned_block', '<', $blockNumber)
+            ->update([
+                'listen_scanned_block' => $blockNumber,
+                'updated_at' => self::now(),
+            ]);
     }
 
     public static function markDetected(int $id, array $data): bool

@@ -224,6 +224,7 @@ CREATE TABLE IF NOT EXISTS `deposit_orders` (
   `from_address` varchar(128) NOT NULL DEFAULT '',
   `to_address` varchar(128) NOT NULL DEFAULT '',
   `listen_from_block` bigint unsigned NOT NULL DEFAULT 0,
+  `listen_scanned_block` bigint unsigned NOT NULL DEFAULT 0,
   `required_confirmations` int unsigned NOT NULL DEFAULT 0,
   `current_confirmations` int unsigned NOT NULL DEFAULT 0,
   `created_at` datetime NOT NULL,
@@ -235,6 +236,7 @@ CREATE TABLE IF NOT EXISTS `deposit_orders` (
   KEY `idx_status` (`status`),
   KEY `idx_source` (`source`),
   KEY `idx_waiting_token_block` (`network_code`,`token_code`,`status`,`listen_from_block`),
+  KEY `idx_waiting_token_scan` (`network_code`,`token_code`,`status`,`listen_scanned_block`),
   KEY `idx_tx` (`network_code`,`tx_hash`,`tx_log_index`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
