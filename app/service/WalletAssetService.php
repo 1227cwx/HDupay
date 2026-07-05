@@ -285,8 +285,7 @@ class WalletAssetService
         $accountId = (int)($account['id'] ?? 0);
         $systemAddress = strtolower((string)($account['collection_address'] ?? ''));
         if (($account['collection_type'] ?? 'local') === 'exchange' && !empty($account['collection_derivation_path'])) {
-            $seedHex = (new CryptoService())->decrypt((string)($account['encrypted_xprv'] ?? ''));
-            $local = (new EvmWalletService())->deriveAddressFromSeed($seedHex, (string)$account['collection_derivation_path']);
+            $local = (new EvmWalletService())->deriveAddressForWalletAccountPath($account, (string)$account['collection_derivation_path']);
             $systemAddress = strtolower((string)$local['address']);
         }
         if ($accountId <= 0 || $systemAddress === '') {

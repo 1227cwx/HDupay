@@ -362,9 +362,8 @@ class WalletService
 
     private function localCollectionAddress(array $account): array
     {
-        $seedHex = (new CryptoService())->decrypt((string)($account['encrypted_xprv'] ?? ''));
         $path = $this->localCollectionPath($account);
-        return (new EvmWalletService())->deriveAddressFromSeed($seedHex, $path);
+        return (new EvmWalletService())->deriveAddressForWalletAccountPath($account, $path);
     }
 
     private function localCollectionPath(array $account): string

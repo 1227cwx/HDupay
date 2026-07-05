@@ -93,18 +93,21 @@ class EvmWalletService
     private function networkAccountPayload(array $master, string $networkCode, array $network, string $seedHex, CryptoService $crypto): array
     {
         $accountIndex = (int)$network['account_index'];
-        $accountPath = "m/44'/60'/{$accountIndex}'/0";
-        $collectionPath = "m/44'/60'/{$accountIndex}'/1/0";
-        $gasFunderPath = "m/44'/60'/{$accountIndex}'/2/0";
-        $collection = $this->deriveAddressFromSeed($seedHex, $collectionPath);
-        $gasFunder = $this->deriveAddressFromSeed($seedHex, $gasFunderPath);
+        $accountRootPath = "m/44'/60'/{$accountIndex}'";
+        $accountPath = $accountRootPath . '/0';
+        $collectionPath = $accountRootPath . '/1/0';
+        $gasFunderPath = $accountRootPath . '/2/0';
+        $accountXprv = $this->accountExtendedPrivateKeyFromSeed($seedHex, $accountRootPath);
+        $accountNode = $this->parseExtendedPrivateKey($accountXprv);
+        $collection = $this->deriveAddressFromAccountNode($accountNode, $accountRootPath, $collectionPath);
+        $gasFunder = $this->deriveAddressFromAccountNode($accountNode, $accountRootPath, $gasFunderPath);
 
         return [
             'wallet_master_id' => $master['id'],
             'network_code' => $networkCode,
             'derivation_path' => $accountPath,
             'xpub' => $this->deriveAccountPublicDescriptor($seedHex, $accountPath),
-            'encrypted_xprv' => $crypto->encrypt($seedHex),
+            'encrypted_xprv' => $crypto->encrypt($accountXprv),
             'next_index' => 0,
             'deposit_timeout_minutes' => 10,
             'collection_type' => 'local',
@@ -124,24 +127,24 @@ class EvmWalletService
             || empty($account['gas_funder_derivation_path'])
             || empty($account['encrypted_gas_funder_private_key']);
 
+        $accountRootPath = $this->accountPrefixFromDepositPath((string)$account['derivation_path']);
+        $accountNode = $this->accountPrivateNode($account);
         if (!$needsCollection && !$needsGasFunder) {
-            return $account;
+            return !empty($account['id']) ? (WalletAccount::findById((int)$account['id']) ?: $account) : $account;
         }
 
-        $seedHex = (new CryptoService())->decrypt($account['encrypted_xprv']);
-        $accountPrefix = $this->accountPrefixFromDepositPath((string)$account['derivation_path']);
         $data = [];
 
         if ($needsCollection) {
-            $collectionPath = $accountPrefix . '/1/0';
-            $collection = $this->deriveAddressFromSeed($seedHex, $collectionPath);
+            $collectionPath = $accountRootPath . '/1/0';
+            $collection = $this->deriveAddressFromAccountNode($accountNode, $accountRootPath, $collectionPath);
             $data['collection_address'] = $collection['address'];
             $data['collection_derivation_path'] = $collectionPath;
         }
 
         if ($needsGasFunder) {
-            $gasFunderPath = $accountPrefix . '/2/0';
-            $gasFunder = $this->deriveAddressFromSeed($seedHex, $gasFunderPath);
+            $gasFunderPath = $accountRootPath . '/2/0';
+            $gasFunder = $this->deriveAddressFromAccountNode($accountNode, $accountRootPath, $gasFunderPath);
             $data['gas_funder_address'] = $gasFunder['address'];
             $data['gas_funder_derivation_path'] = $gasFunderPath;
             $data['encrypted_gas_funder_private_key'] = (new CryptoService())->encrypt($gasFunder['private_key']);
@@ -161,10 +164,9 @@ class EvmWalletService
         if (!$account) {
             throw new RuntimeException('当前网络账户不存在或未启用');
         }
-        $seedHex = (new CryptoService())->decrypt($account['encrypted_xprv']);
         $index = (int)$account['next_index'];
         $path = $account['derivation_path'] . '/' . $index;
-        $derived = $this->deriveAddressFromSeed($seedHex, $path);
+        $derived = $this->deriveAddressForWalletAccountPath($account, $path);
         $address = PaymentAddress::createRecord([
             'network_code' => $networkCode,
             'token_code' => $tokenCode,
@@ -186,14 +188,91 @@ class EvmWalletService
         if (!$account) {
             throw new RuntimeException('钱包账号不存在');
         }
-        $seedHex = (new CryptoService())->decrypt($account['encrypted_xprv']);
-        return $this->deriveAddressFromSeed($seedHex, $address['derivation_path'])['private_key'];
+        return $this->deriveAddressForWalletAccountPath($account, (string)$address['derivation_path'])['private_key'];
     }
 
     public function privateKeyForWalletAccountPath(array $account, string $path): string
     {
-        $seedHex = (new CryptoService())->decrypt($account['encrypted_xprv'] ?? '');
-        return $this->deriveAddressFromSeed($seedHex, $path)['private_key'];
+        return $this->deriveAddressForWalletAccountPath($account, $path)['private_key'];
+    }
+
+    public function deriveAddressForWalletAccountPath(array $account, string $path): array
+    {
+        $accountRootPath = $this->accountPrefixFromDepositPath((string)($account['derivation_path'] ?? ''));
+        return $this->deriveAddressFromAccountNode(
+            $this->accountPrivateNode($account),
+            $accountRootPath,
+            $path
+        );
+    }
+
+    private function accountPrivateNode(array $account): array
+    {
+        $encrypted = (string)($account['encrypted_xprv'] ?? '');
+        if ($encrypted === '') {
+            throw new RuntimeException('网络账户私钥未配置');
+        }
+
+        $crypto = new CryptoService();
+        $secret = trim($crypto->decrypt($encrypted));
+        $accountRootPath = $this->accountPrefixFromDepositPath((string)($account['derivation_path'] ?? ''));
+        if (str_starts_with($secret, 'xprv')) {
+            return $this->parseExtendedPrivateKey($secret);
+        }
+
+        if (preg_match('/^[a-f0-9]{128}$/i', $secret)) {
+            $xprv = $this->accountExtendedPrivateKeyFromSeed($secret, $accountRootPath);
+            if (!empty($account['id'])) {
+                WalletAccount::updateById((int)$account['id'], ['encrypted_xprv' => $crypto->encrypt($xprv)]);
+            }
+            return $this->parseExtendedPrivateKey($xprv);
+        }
+
+        throw new RuntimeException('网络账户私钥格式无效');
+    }
+
+    private function accountExtendedPrivateKeyFromSeed(string $seedHex, string $accountRootPath): string
+    {
+        $node = $this->derivePrivateNode($seedHex, $accountRootPath);
+        $accountIndex = $this->accountIndexFromRootPath($accountRootPath);
+        return $this->serializeExtendedPrivateKey(
+            $node['private_key'],
+            $node['chain_code'],
+            3,
+            $accountIndex + 0x80000000
+        );
+    }
+
+    private function deriveAddressFromAccountNode(array $node, string $accountRootPath, string $path): array
+    {
+        $accountRootPath = rtrim(trim($accountRootPath), '/');
+        $path = rtrim(trim($path), '/');
+        if ($path === '') {
+            throw new InvalidArgumentException('派生路径不能为空');
+        }
+        if ($path === $accountRootPath) {
+            $relativePath = '';
+        } elseif (str_starts_with($path, $accountRootPath . '/')) {
+            $relativePath = substr($path, strlen($accountRootPath) + 1);
+        } else {
+            throw new InvalidArgumentException('派生路径不属于当前网络账户');
+        }
+
+        $privateKey = (string)$node['private_key'];
+        $chainCode = (string)$node['chain_code'];
+        foreach ($this->parsePath($relativePath) as $segment) {
+            [$privateKey, $chainCode] = $this->deriveChild($privateKey, $chainCode, $segment);
+        }
+
+        $util = new Util();
+        $publicKey = $util->privateKeyToPublicKey($privateKey);
+        $address = $util->publicKeyToAddress($publicKey);
+        return [
+            'path' => $path,
+            'private_key' => $privateKey,
+            'public_key' => $publicKey,
+            'address' => strtolower($address),
+        ];
     }
 
     public function exportRootPrivateKey(int $masterId, string $mnemonic): array
@@ -349,6 +428,14 @@ class EvmWalletService
         return substr($path, 0, -2);
     }
 
+    private function accountIndexFromRootPath(string $path): int
+    {
+        if (!preg_match("#^m/44'/60'/(\\d+)'$#", rtrim(trim($path), '/'), $matches)) {
+            throw new InvalidArgumentException('钱包账户根派生路径格式错误');
+        }
+        return (int)$matches[1];
+    }
+
     private function deriveChild(string $privateKey, string $chainCode, int $index): array
     {
         if ($index >= 0x80000000) {
@@ -369,18 +456,52 @@ class EvmWalletService
 
     private function rootExtendedPrivateKey(string $privateKey, string $chainCode): string
     {
-        $payloadHex = '0488ade4' // mainnet xprv
-            . '00' // depth
-            . '00000000' // parent fingerprint
-            . '00000000' // child number
+        return $this->serializeExtendedPrivateKey($privateKey, $chainCode, 0, 0);
+    }
+
+    private function serializeExtendedPrivateKey(string $privateKey, string $chainCode, int $depth, int $childNumber): string
+    {
+        $payloadHex = '0488ade4'
+            . str_pad(dechex($depth), 2, '0', STR_PAD_LEFT)
+            . '00000000'
+            . $this->ser32($childNumber)
             . str_pad($chainCode, 64, '0', STR_PAD_LEFT)
             . '00' . str_pad($privateKey, 64, '0', STR_PAD_LEFT);
         $payload = hex2bin($payloadHex);
         if ($payload === false) {
-            throw new RuntimeException('根扩展私钥序列化失败');
+            throw new RuntimeException('扩展私钥序列化失败');
         }
         $checksum = substr(hash('sha256', hash('sha256', $payload, true), true), 0, 4);
         return $this->base58Encode($payload . $checksum);
+    }
+
+    private function parseExtendedPrivateKey(string $xprv): array
+    {
+        $decoded = $this->base58Decode($xprv);
+        if (strlen($decoded) !== 82) {
+            throw new InvalidArgumentException('扩展私钥格式错误');
+        }
+
+        $payload = substr($decoded, 0, 78);
+        $checksum = substr($decoded, 78, 4);
+        $expectedChecksum = substr(hash('sha256', hash('sha256', $payload, true), true), 0, 4);
+        if (!hash_equals($expectedChecksum, $checksum)) {
+            throw new InvalidArgumentException('扩展私钥校验失败');
+        }
+        if (bin2hex(substr($payload, 0, 4)) !== '0488ade4') {
+            throw new InvalidArgumentException('扩展私钥版本无效');
+        }
+
+        $chainCode = bin2hex(substr($payload, 13, 32));
+        $keyData = substr($payload, 45, 33);
+        if ($keyData === '' || $keyData[0] !== "\x00") {
+            throw new InvalidArgumentException('扩展私钥数据无效');
+        }
+
+        return [
+            'private_key' => bin2hex(substr($keyData, 1, 32)),
+            'chain_code' => $chainCode,
+        ];
     }
 
     private function base58Encode(string $bytes): string
@@ -400,6 +521,40 @@ class EvmWalletService
         }
 
         return $encoded !== '' ? $encoded : '1';
+    }
+
+    private function base58Decode(string $encoded): string
+    {
+        $encoded = trim($encoded);
+        if ($encoded === '') {
+            throw new InvalidArgumentException('Base58 内容不能为空');
+        }
+
+        $num = gmp_init(0, 10);
+        $length = strlen($encoded);
+        for ($i = 0; $i < $length; $i++) {
+            $index = strpos(self::BASE58_ALPHABET, $encoded[$i]);
+            if ($index === false) {
+                throw new InvalidArgumentException('Base58 字符无效');
+            }
+            $num = gmp_add(gmp_mul($num, 58), $index);
+        }
+
+        $hex = gmp_cmp($num, 0) > 0 ? gmp_strval($num, 16) : '';
+        if ($hex !== '' && strlen($hex) % 2 !== 0) {
+            $hex = '0' . $hex;
+        }
+        $bytes = $hex === '' ? '' : hex2bin($hex);
+        if ($bytes === false) {
+            throw new InvalidArgumentException('Base58 内容解析失败');
+        }
+
+        $leadingZeroCount = 0;
+        while ($leadingZeroCount < $length && $encoded[$leadingZeroCount] === '1') {
+            $bytes = "\x00" . $bytes;
+            $leadingZeroCount++;
+        }
+        return $bytes;
     }
 
     private function compressedPublicKey(string $privateKey): string
