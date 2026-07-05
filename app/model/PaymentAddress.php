@@ -34,6 +34,18 @@ class PaymentAddress extends BaseModel
         return $row ? $row->toArray() : null;
     }
 
+    public static function findAvailableForUpdate(string $networkCode, string $tokenCode): ?array
+    {
+        $row = self::query()
+            ->where('network_code', $networkCode)
+            ->where('token_code', $tokenCode)
+            ->where('status', 'available')
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->first();
+        return $row ? $row->toArray() : null;
+    }
+
     public static function findByAddress(string $networkCode, string $address): ?array
     {
         $row = self::query()->where('network_code', $networkCode)->where('address_lower', strtolower($address))->first();
@@ -65,11 +77,15 @@ class PaymentAddress extends BaseModel
 
     public static function assignToOrder(int $id, string $orderNo): bool
     {
-        return self::updateById($id, [
-            'status' => 'assigned',
-            'assigned_order_no' => $orderNo,
-            'assigned_at' => self::now(),
-        ]);
+        return self::query()
+            ->where('id', $id)
+            ->where('status', 'available')
+            ->update([
+                'status' => 'assigned',
+                'assigned_order_no' => $orderNo,
+                'assigned_at' => self::now(),
+                'updated_at' => self::now(),
+            ]) > 0;
     }
 
     public static function markStatus(int $id, string $status): bool

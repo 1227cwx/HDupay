@@ -36,6 +36,17 @@ class WalletAccount extends BaseModel
         return $row ? $row->toArray() : null;
     }
 
+    public static function findByNetworkForUpdate(string $networkCode): ?array
+    {
+        $row = self::query()
+            ->where('network_code', $networkCode)
+            ->where('status', 'active')
+            ->orderByDesc('id')
+            ->lockForUpdate()
+            ->first();
+        return $row ? $row->toArray() : null;
+    }
+
     public static function findAnyByNetwork(string $networkCode): ?array
     {
         $row = self::query()->where('network_code', $networkCode)->orderByDesc('id')->first();

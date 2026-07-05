@@ -61,48 +61,63 @@ class DepositService
             throw new InvalidArgumentException('交易金额必须大于 0');
         }
 
-        $orderNo = $this->makeOrderNo();
-        $orderToken = $this->makeOrderToken();
-        $address = (new AddressPoolService())->allocate($networkCode, $tokenCode, $orderNo);
-        $timeoutMinutes = $this->depositTimeoutMinutes((int)($address['wallet_account_id'] ?? 0));
-        $expireAt = date('Y-m-d H:i:s', time() + $timeoutMinutes * 60);
         $sourceIp = trim((string)($input['source_ip'] ?? ''));
         $returnUrl = $this->normalizeReturnUrl((string)($input['return_url'] ?? ''));
         $baseUrl = trim((string)($input['base_url'] ?? ''));
 
-        $record = [
-            'order_no' => $orderNo,
-            'order_token' => $orderToken,
-            'user_id' => (int)($input['user_id'] ?? 0),
-            'source' => $source,
-            'source_ip' => $sourceIp,
-            'api_client_id' => $apiClientId,
-            'network_code' => $networkCode,
-            'token_code' => $tokenCode,
-            'fiat_currency' => $quote['fiat_currency'],
-            'fiat_amount' => $quote['fiat_amount'],
-            'token_amount' => $quote['token_amount'],
-            'exchange_rate' => $quote['exchange_rate'],
-            'rate_provider' => $quote['rate_provider'],
-            'rate_fetched_at' => $quote['rate_fetched_at'],
-            'return_url' => $returnUrl,
-            'amount_int' => $quote['amount_int'],
-            'amount_display' => $quote['token_amount'],
-            'paid_amount_int' => '0',
-            'address_id' => $address['id'],
-            'address' => strtolower($address['address_lower']),
-            'to_address' => strtolower($address['address_lower']),
-            'required_confirmations' => $requiredConfirmations,
-            'current_confirmations' => 0,
-            'status' => 'waiting',
-            'expire_at' => $expireAt,
-        ];
-        DepositOrder::createRecord($record);
-        if ($epayOrderNo !== '') {
-            (new EasyPayService())->attachDepositOrder($epayOrderNo, $orderNo);
-        }
+        return DepositOrder::query()->getModel()->getConnection()->transaction(function () use (
+            $networkCode,
+            $tokenCode,
+            $source,
+            $sourceIp,
+            $apiClientId,
+            $input,
+            $quote,
+            $requiredConfirmations,
+            $returnUrl,
+            $baseUrl,
+            $epayOrderNo
+        ) {
+            $orderNo = $this->makeOrderNo();
+            $orderToken = $this->makeOrderToken();
+            $address = (new AddressPoolService())->allocate($networkCode, $tokenCode, $orderNo);
+            $timeoutMinutes = $this->depositTimeoutMinutes((int)($address['wallet_account_id'] ?? 0));
+            $expireAt = date('Y-m-d H:i:s', time() + $timeoutMinutes * 60);
 
-        return $this->orderPayload(DepositOrder::findByOrderNo($orderNo) ?: $record, $timeoutMinutes, $baseUrl);
+            $record = [
+                'order_no' => $orderNo,
+                'order_token' => $orderToken,
+                'user_id' => (int)($input['user_id'] ?? 0),
+                'source' => $source,
+                'source_ip' => $sourceIp,
+                'api_client_id' => $apiClientId,
+                'network_code' => $networkCode,
+                'token_code' => $tokenCode,
+                'fiat_currency' => $quote['fiat_currency'],
+                'fiat_amount' => $quote['fiat_amount'],
+                'token_amount' => $quote['token_amount'],
+                'exchange_rate' => $quote['exchange_rate'],
+                'rate_provider' => $quote['rate_provider'],
+                'rate_fetched_at' => $quote['rate_fetched_at'],
+                'return_url' => $returnUrl,
+                'amount_int' => $quote['amount_int'],
+                'amount_display' => $quote['token_amount'],
+                'paid_amount_int' => '0',
+                'address_id' => $address['id'],
+                'address' => strtolower($address['address_lower']),
+                'to_address' => strtolower($address['address_lower']),
+                'required_confirmations' => $requiredConfirmations,
+                'current_confirmations' => 0,
+                'status' => 'waiting',
+                'expire_at' => $expireAt,
+            ];
+            $created = DepositOrder::createRecord($record);
+            if ($epayOrderNo !== '') {
+                (new EasyPayService())->attachDepositOrder($epayOrderNo, $orderNo);
+            }
+
+            return $this->orderPayload($created ?: $record, $timeoutMinutes, $baseUrl);
+        });
     }
 
     private function requiredConfirmationsForAmount(EvmRpcService $rpc, string $networkCode, string $amountInt, int $decimals): int

@@ -157,7 +157,7 @@ class EvmWalletService
 
     public function createNextAddress(string $networkCode, string $tokenCode = 'USDC'): array
     {
-        $account = WalletAccount::findByNetwork($networkCode);
+        $account = WalletAccount::findByNetworkForUpdate($networkCode);
         if (!$account) {
             throw new RuntimeException('当前网络账户不存在或未启用');
         }
