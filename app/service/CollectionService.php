@@ -133,18 +133,17 @@ class CollectionService
         $taskId = (int)($task['id'] ?? 0);
         $originalStatus = (string)($task['status'] ?? '');
         $networkCode = (string)($task['network_code'] ?? '');
-        $tokenCode = strtoupper((string)($task['token_code'] ?? ''));
         $maxRetryCount = $this->autoCollectMaxRetryCount();
-        $lockAcquired = CollectionTask::acquireNetworkTokenLock($networkCode, $tokenCode);
+        $lockAcquired = CollectionTask::acquireNetworkLock($networkCode);
         if (!$lockAcquired) {
             if ($throwOnFailure) {
-                throw new RuntimeException('同网络同代币归集任务正在处理，请稍后再试');
+                throw new RuntimeException('同网络归集任务正在处理，请稍后再试');
             }
             return [
                 'task_id' => $taskId,
                 'ok' => true,
                 'skipped' => true,
-                'reason' => 'network_token_locked',
+                'reason' => 'network_locked',
             ];
         }
 
@@ -152,13 +151,13 @@ class CollectionService
         try {
             if (CollectionTask::hasEarlierBlockingTask($task, $maxRetryCount)) {
                 if ($throwOnFailure) {
-                    throw new RuntimeException('同网络同代币已有更早的归集任务未完成，请稍后再试');
+                    throw new RuntimeException('同网络已有更早的归集任务未完成，请稍后再试');
                 }
                 return [
                     'task_id' => $taskId,
                     'ok' => true,
                     'skipped' => true,
-                    'reason' => 'network_token_busy',
+                    'reason' => 'network_busy',
                 ];
             }
 
@@ -194,7 +193,7 @@ class CollectionService
                 return ['task_id' => $taskId, 'ok' => false, 'error' => $e->getMessage()];
             }
         } finally {
-            CollectionTask::releaseNetworkTokenLock($networkCode, $tokenCode);
+            CollectionTask::releaseNetworkLock($networkCode);
         }
     }
 
