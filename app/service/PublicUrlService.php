@@ -29,7 +29,13 @@ class PublicUrlService
         return [
             'public_base_url' => SystemSetting::getValue('site_public_base_url', ''),
             'admin_allowed_domain' => (new AdminDomainAccessService())->allowedDomain(),
+            'pay_public_enabled' => $this->payPublicEnabled() ? 1 : 0,
         ];
+    }
+
+    public function payPublicEnabled(): bool
+    {
+        return SystemSetting::getValue('site_pay_public_enabled', '1') === '1';
     }
 
     public function save(array $input): array
@@ -47,6 +53,9 @@ class PublicUrlService
 
         (new AdminDomainAccessService())->save((string)($input['admin_allowed_domain'] ?? ''), $publicBaseUrl);
         SystemSetting::saveValue('site_public_base_url', $publicBaseUrl);
+        if (array_key_exists('pay_public_enabled', $input)) {
+            SystemSetting::saveValue('site_pay_public_enabled', !empty($input['pay_public_enabled']) ? '1' : '0');
+        }
         return $this->settings();
     }
 

@@ -56,7 +56,7 @@ Route::group('/hdupay', function () {
  * Public pay routes.
  */
 Route::group('/pay', function () {
-    Route::get('', [IndexController::class, 'index']);
+    Route::get('', [IndexController::class, 'pay']);
 })->middleware(PublicDomainMiddleware::class);
 Route::get('/submit.php', [EasyPayController::class, 'submit'])->middleware(PublicDomainMiddleware::class);
 Route::post('/submit.php', [EasyPayController::class, 'submit'])->middleware(PublicDomainMiddleware::class);

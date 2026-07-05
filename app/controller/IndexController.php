@@ -2,6 +2,7 @@
 
 namespace app\controller;
 
+use app\service\PublicUrlService;
 use support\Request;
 
 class IndexController
@@ -16,6 +17,15 @@ class IndexController
         return response(file_get_contents($indexFile), 200, [
             'Content-Type' => 'text/html; charset=utf-8',
         ]);
+    }
+
+    public function pay(Request $request)
+    {
+        if (!(new PublicUrlService())->payPublicEnabled()) {
+            return response('Not Found', 404);
+        }
+
+        return $this->index($request);
     }
 
     public function view(Request $request)

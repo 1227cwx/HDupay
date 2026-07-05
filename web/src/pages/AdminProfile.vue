@@ -48,6 +48,7 @@
           <n-form :model="siteForm" label-placement="top">
             <n-form-item label="公开访问地址"><n-input v-model:value="siteForm.public_base_url" placeholder="例如：https://cwx-u.jkeyun.com" clearable /></n-form-item>
             <n-form-item label="后台访问域名"><n-input v-model:value="siteForm.admin_allowed_domain" placeholder="为空不限制，例如：admin.example.com" clearable /></n-form-item>
+            <n-form-item label="开放 Pay 公开页面"><n-switch v-model:value="siteForm.pay_public_enabled" :checked-value="1" :unchecked-value="0" /></n-form-item>
             <n-form-item><n-button type="primary" :loading="siteSaving" @click="saveSite"><template #icon><n-icon><SaveOutline /></n-icon></template>保存站点设置</n-button></n-form-item>
           </n-form>
         </n-space>
@@ -71,7 +72,7 @@ const passwordSaving = ref(false)
 const siteSaving = ref(false)
 const profileForm = reactive({ username: '', nickname: '' })
 const passwordForm = reactive({ old_password: '', new_password: '', confirm_password: '' })
-const siteForm = reactive({ public_base_url: '', admin_allowed_domain: '' })
+const siteForm = reactive({ public_base_url: '', admin_allowed_domain: '', pay_public_enabled: 1 })
 
 async function loadCurrent() {
   const data: any = await api.get('/admin/auth/me')
@@ -89,6 +90,7 @@ async function loadSite() {
     const data: any = await api.get('/admin/system/settings')
     siteForm.public_base_url = data?.site?.public_base_url || ''
     siteForm.admin_allowed_domain = data?.site?.admin_allowed_domain || ''
+    siteForm.pay_public_enabled = Number(data?.site?.pay_public_enabled ?? 1)
   } catch (e: any) {
     message.error(e.message)
   }
@@ -97,9 +99,10 @@ async function loadSite() {
 async function saveSite() {
   siteSaving.value = true
   try {
-    const data: any = await api.post('/admin/system/site/save', { public_base_url: siteForm.public_base_url, admin_allowed_domain: siteForm.admin_allowed_domain })
+    const data: any = await api.post('/admin/system/site/save', { public_base_url: siteForm.public_base_url, admin_allowed_domain: siteForm.admin_allowed_domain, pay_public_enabled: siteForm.pay_public_enabled })
     siteForm.public_base_url = data?.public_base_url || ''
     siteForm.admin_allowed_domain = data?.admin_allowed_domain || ''
+    siteForm.pay_public_enabled = Number(data?.pay_public_enabled ?? 1)
     message.success('站点设置已保存')
   } catch (e: any) {
     message.error(e.message)

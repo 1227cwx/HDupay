@@ -34,6 +34,15 @@ class DepositService
             $input = (new EasyPayService())->applyToDepositInput($epayOrderNo, $input);
         }
 
+        $source = $this->normalizeSource((string)($input['source'] ?? 'frontend'));
+        $apiClientId = (int)($input['api_client_id'] ?? 0);
+        if ($apiClientId > 0 && $source !== 'epay') {
+            $source = 'api';
+        }
+        if ($source === 'frontend' && !(new PublicUrlService())->payPublicEnabled()) {
+            throw new InvalidArgumentException('公开支付页面已关闭');
+        }
+
         $networkCode = trim((string)($input['network'] ?? $input['network_id'] ?? ''));
         if (!config('chains.networks.' . $networkCode)) {
             throw new InvalidArgumentException('网络不存在');
@@ -57,12 +66,7 @@ class DepositService
         $address = (new AddressPoolService())->allocate($networkCode, $tokenCode, $orderNo);
         $timeoutMinutes = $this->depositTimeoutMinutes((int)($address['wallet_account_id'] ?? 0));
         $expireAt = date('Y-m-d H:i:s', time() + $timeoutMinutes * 60);
-        $source = $this->normalizeSource((string)($input['source'] ?? 'frontend'));
         $sourceIp = trim((string)($input['source_ip'] ?? ''));
-        $apiClientId = (int)($input['api_client_id'] ?? 0);
-        if ($apiClientId > 0 && $source !== 'epay') {
-            $source = 'api';
-        }
         $returnUrl = $this->normalizeReturnUrl((string)($input['return_url'] ?? ''));
         $baseUrl = trim((string)($input['base_url'] ?? ''));
 
