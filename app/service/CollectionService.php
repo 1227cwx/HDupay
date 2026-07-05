@@ -53,6 +53,13 @@ class CollectionService
 
     public function retry(int $id): bool
     {
+        $task = CollectionTask::findById($id);
+        if (!$task) {
+            throw new RuntimeException('归集记录不存在');
+        }
+        if (!in_array((string)($task['status'] ?? ''), CollectionTask::RETRY_STATUSES, true)) {
+            throw new RuntimeException('只有归集失败或需要手动处理的记录才允许重试');
+        }
         return CollectionTask::mark($id, 'pending_collect', ['error_message' => '']);
     }
 
