@@ -129,7 +129,9 @@ class EasyPayService
         if (!$order) {
             throw new InvalidArgumentException('易支付订单不存在');
         }
-        EasyPayOrder::attachDepositOrder((int)$order['id'], $depositOrderNo);
+        if (!EasyPayOrder::attachDepositOrder((int)$order['id'], $depositOrderNo)) {
+            throw new InvalidArgumentException('易支付订单已创建收款地址');
+        }
     }
 
     public function sendNotifyForDepositOrder(array $depositOrder, bool $manual = false): array

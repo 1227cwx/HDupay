@@ -71,10 +71,14 @@ class EasyPayOrder extends BaseModel
 
     public static function attachDepositOrder(int $id, string $depositOrderNo): bool
     {
-        return self::updateById($id, [
-            'deposit_order_no' => $depositOrderNo,
-            'status' => 'paying',
-        ]);
+        return self::query()
+            ->where('id', $id)
+            ->where('deposit_order_no', '')
+            ->update([
+                'deposit_order_no' => $depositOrderNo,
+                'status' => 'paying',
+                'updated_at' => self::now(),
+            ]) > 0;
     }
 
     public static function markSuccess(int $id): bool
