@@ -196,8 +196,8 @@ function resetSearch() {
 async function processAll() {
   allProcessing.value = true
   try {
-    const result: any[] = await api.post('/admin/collection/process-all')
-    message.success(`已执行 ${result.length} 条归集记录`)
+    const result: any = await api.post('/admin/collection/process-all')
+    message.success(queueStatsMessage(result, '归集'))
     await load(true)
   } catch (e: any) {
     message.error(e.message)
@@ -206,11 +206,18 @@ async function processAll() {
   }
 }
 
+function queueStatsMessage(result: any, name: string) {
+  const created = Number(result?.created ?? 0)
+  const skipped = Number(result?.skipped ?? 0)
+  const failed = Number(result?.failed ?? 0)
+  return `已创建${created}条${name}队列，跳过${skipped}条，失败${failed}条`
+}
+
 async function processOne(id: number) {
   rowProcessingId.value = id
   try {
     await api.post('/admin/collection/process-one', { id })
-    message.success('已执行该归集记录')
+    message.success('已加入归集队列')
     await load(true)
   } catch (e: any) {
     message.error(e.message)
@@ -224,18 +231,29 @@ function renderActions(row: any) {
     size: 'small',
     type: 'primary',
     secondary: true,
-    disabled: !canProcess(row.status),
+    disabled: !canProcess(row),
     loading: rowProcessingId.value === Number(row.id),
     onClick: () => processOne(Number(row.id))
   }, { default: () => '归集' })
 }
 
-function canProcess(status: string) {
-  return status === 'collect_failed'
+function hasActiveQueue(row: any) {
+  return Number(row.queue_active) === 1 || (Number(row.queue_is_invalid) === 0 && ['queued', 'processing'].includes(String(row.queue_process_status || '')))
+}
+
+function effectiveStatus(row: any) {
+  if (row.status === 'collected') return 'collected'
+  if (hasActiveQueue(row)) return String(row.queue_process_status || row.status)
+  return row.status
+}
+
+function canProcess(row: any) {
+  return ['collect_failed', 'manual_required'].includes(row.status) && !hasActiveQueue(row)
 }
 
 function statusText(status: string) {
   const map: Record<string, string> = {
+    queued: '已入队',
     pending_collect: '待归集',
     processing: '处理中',
     gas_funding: '补充 Gas 中',
@@ -251,13 +269,15 @@ function statusType(status: string) {
   if (status === 'collected') return 'success'
   if (status === 'collect_failed' || status === 'manual_required') return 'error'
   if (status === 'processing' || status === 'gas_funding' || status === 'collecting') return 'warning'
+  if (status === 'queued') return 'info'
   return 'info'
 }
 
 function renderStatus(row: any) {
-  const tag = () => h(NTag, { type: statusType(row.status), bordered: false }, { default: () => statusText(row.status) })
-  const reason = String(row.error_message || '').trim()
-  if (!reason || !['collect_failed', 'manual_required'].includes(row.status)) {
+  const displayStatus = effectiveStatus(row)
+  const tag = () => h(NTag, { type: statusType(displayStatus), bordered: false }, { default: () => statusText(displayStatus) })
+  const reason = String(row.queue_last_error || row.error_message || '').trim()
+  if (!reason || (!hasActiveQueue(row) && !['collect_failed', 'manual_required'].includes(row.status))) {
     return tag()
   }
   return h(NTooltip, {
@@ -325,6 +345,13 @@ function renderProgress(row: any) {
 }
 
 function collectionProgress(row: any): { percentage: number, status: ProgressStatus, text: string } {
+  const displayStatus = effectiveStatus(row)
+  if (displayStatus === 'queued') {
+    return { percentage: 0, status: 'info', text: '已入队' }
+  }
+  if (displayStatus === 'processing' && ['pending_collect', 'processing', 'collect_failed', 'manual_required'].includes(row.status)) {
+    return { percentage: 10, status: 'warning', text: '处理中' }
+  }
   if (row.status === 'collected') {
     return { percentage: 100, status: 'success', text: '已完成' }
   }

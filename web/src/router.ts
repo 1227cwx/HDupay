@@ -9,8 +9,6 @@ import GasWallets from './pages/GasWallets.vue'
 import Addresses from './pages/Addresses.vue'
 import Orders from './pages/Orders.vue'
 import Collections from './pages/Collections.vue'
-import Withdrawals from './pages/Withdrawals.vue'
-import WithdrawSettings from './pages/WithdrawSettings.vue'
 import DepositCreate from './pages/DepositCreate.vue'
 import OpenApi from './pages/OpenApi.vue'
 import Pay from './pages/Pay.vue'
@@ -40,8 +38,6 @@ export default createRouter({
     { path: `${admin}/addresses`, component: Addresses },
     { path: `${admin}/orders`, component: Orders },
     { path: `${admin}/collections`, component: Collections },
-    { path: `${admin}/withdraw-settings`, component: WithdrawSettings },
-    { path: `${admin}/withdrawals`, component: Withdrawals },
     { path: `${admin}/deposit-create`, component: DepositCreate },
     { path: `${admin}/open-api`, component: OpenApi },
     { path: `${admin}/admin-profile`, component: AdminProfile },

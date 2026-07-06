@@ -7,14 +7,14 @@ use app\model\AdminLoginAttempt;
 use app\model\CollectionTask;
 use app\model\DepositOrder;
 use app\model\EasyPayOrder;
-use app\model\FiatExchangeRate;
 use app\model\GasFundingTransaction;
+use app\model\GlobalGasWallet;
+use app\model\GlobalGasWalletBalance;
 use app\model\OpenApiClient;
 use app\model\OpenApiCallbackLog;
 use app\model\PaymentAddress;
+use app\model\TaskQueue;
 use app\model\WalletCollectionAddress;
-use app\model\WithdrawalTask;
-use app\model\WithdrawSetting;
 use app\model\WalletAccount;
 use app\model\WalletMaster;
 use InvalidArgumentException;
@@ -24,11 +24,14 @@ class WalletService
 {
     public function initialize(array $input): array
     {
-        $result = (new EvmWalletService())->initializeWallet((string)($input['name'] ?? 'default'), $input['mnemonic'] ?? null);
-        foreach (WalletAccount::listPage([], 1, 100, 'id', 'asc')['items'] as $account) {
-            $this->createAccountRelatedRows($account);
-        }
-        return $result;
+        return WalletMaster::transaction(function () use ($input) {
+            $result = (new EvmWalletService())->initializeWallet((string)($input['name'] ?? 'default'), $input['mnemonic'] ?? null);
+            $masterId = (int)($result['master']['id'] ?? 0);
+            foreach (WalletAccount::listByMasterId($masterId) as $account) {
+                $this->createAccountRelatedRows($account);
+            }
+            return $result;
+        });
     }
 
     public function masters(): array
@@ -43,6 +46,7 @@ class WalletService
             $item = (new EvmWalletService())->ensureAccountSystemAddresses($item);
             $item = $this->sanitizeAccount($item);
         }
+        unset($item);
         return $items;
     }
 
@@ -52,6 +56,7 @@ class WalletService
         $accounts = $this->accounts();
         $supportedNetworks = $this->supportedNetworkOptions();
         $availableNetworks = $this->availableNetworkOptions();
+        $globalGasWallet = $this->globalGasWalletForOverview();
         $addressStats = $this->groupStats(PaymentAddress::statusStats());
         $collectionStats = $this->groupStats(CollectionTask::statusStats());
 
@@ -63,6 +68,7 @@ class WalletService
             $account['address_stats'] = $addressStats[$networkCode] ?? $this->emptyAddressStats();
             $account['collection_stats'] = $collectionStats[$networkCode] ?? $this->emptyCollectionStats();
         }
+        unset($account);
 
         $totalAddressStats = $this->sumStats($addressStats, $this->emptyAddressStats());
         $totalCollectionStats = $this->sumStats($collectionStats, $this->emptyCollectionStats());
@@ -70,6 +76,7 @@ class WalletService
         return [
             'masters' => $masters,
             'accounts' => $accounts,
+            'global_gas_wallet' => $globalGasWallet,
             'supported_networks' => $supportedNetworks,
             'available_networks' => $availableNetworks,
             'summary' => [
@@ -91,15 +98,15 @@ class WalletService
         $networkCode = trim((string)($input['network_code'] ?? ''));
         $type = trim((string)($input['type'] ?? ''));
         if ($networkCode === '') {
-            throw new InvalidArgumentException('网络不能为空');
+            throw new InvalidArgumentException('??????');
         }
         if (!in_array($type, ['collection', 'gas'], true)) {
-            throw new InvalidArgumentException('余额类型无效');
+            throw new InvalidArgumentException('??????');
         }
 
         $account = WalletAccount::findAnyByNetwork($networkCode);
         if (!$account) {
-            throw new RuntimeException('网络账户不存在');
+            throw new RuntimeException('???????');
         }
         $this->assertAccountActive($account);
 
@@ -107,10 +114,11 @@ class WalletService
             $activeCollection = (new WalletAssetService())->activeCollectionAddressForAccount($account);
             $address = (string)($activeCollection['address_lower'] ?? ($account['collection_address'] ?? ''));
         } else {
-            $address = (string)($account['gas_funder_address'] ?? '');
+            $globalGasWallet = $this->globalGasWallet();
+            $address = (string)($globalGasWallet['address_lower'] ?? '');
         }
         if ($address === '') {
-            throw new RuntimeException($type === 'collection' ? '归集钱包地址未配置' : 'Gas 钱包地址未配置');
+            throw new RuntimeException($type === 'collection' ? '?????????' : 'Gas ???????');
         }
 
         $rpc = new EvmRpcService();
@@ -153,16 +161,16 @@ class WalletService
     {
         $id = (int)($input['id'] ?? 0);
         if ($id <= 0) {
-            throw new InvalidArgumentException('钱包账号 ID 无效');
+            throw new InvalidArgumentException('???? ID ??');
         }
         $collectionType = (string)($input['collection_type'] ?? 'local');
         if (!in_array($collectionType, ['local', 'exchange'], true)) {
-            throw new InvalidArgumentException('归集类型无效');
+            throw new InvalidArgumentException('??????');
         }
 
         $account = WalletAccount::findById($id);
         if (!$account) {
-            throw new RuntimeException('网络账户不存在');
+            throw new RuntimeException('???????');
         }
         $this->assertAccountActive($account);
 
@@ -214,21 +222,21 @@ class WalletService
                 'deleted_easypay_orders' => $this->deleteAllRows(EasyPayOrder::class),
                 'deleted_orders' => $this->deleteAllRows(DepositOrder::class),
                 'deleted_collection_tasks' => $this->deleteAllRows(CollectionTask::class),
-                'deleted_withdrawal_tasks' => $this->deleteAllRows(WithdrawalTask::class),
                 'deleted_gas_funding_transactions' => $this->deleteAllRows(GasFundingTransaction::class),
                 'deleted_payment_addresses' => $this->deleteAllRows(PaymentAddress::class),
                 'deleted_collection_wallets' => $this->deleteAllRows(WalletCollectionAddress::class),
-                'deleted_withdraw_settings' => $this->deleteAllRows(WithdrawSetting::class),
                 'deleted_open_api_clients' => $this->deleteAllRows(OpenApiClient::class),
-                'deleted_fiat_exchange_rates' => $this->deleteAllRows(FiatExchangeRate::class),
                 'deleted_admin_login_attempts' => $this->deleteAllRows(AdminLoginAttempt::class),
                 'deleted_audit_logs' => $this->deleteAllRows(AuditLog::class),
+                'deleted_global_gas_wallet_balances' => $this->deleteAllRows(GlobalGasWalletBalance::class),
+                'deleted_global_gas_wallets' => $this->deleteAllRows(GlobalGasWallet::class),
+                'deleted_task_queue' => $this->deleteAllRows(TaskQueue::class),
                 'deleted_network_accounts' => $this->deleteAllRows(WalletAccount::class),
                 'deleted_root_wallets' => $this->deleteAllRows(WalletMaster::class),
             ];
 
             if ($deleted['deleted_root_wallets'] <= 0) {
-                throw new InvalidArgumentException('根钱包删除失败');
+                throw new InvalidArgumentException('???????');
             }
 
             return $deleted;
@@ -239,29 +247,31 @@ class WalletService
     {
         $networkCode = trim((string)($input['network_code'] ?? ''));
         if ($networkCode === '') {
-            throw new InvalidArgumentException('请选择要添加的网络');
+            throw new InvalidArgumentException('?????????');
         }
 
         $master = WalletMaster::latestActive();
         if (!$master) {
-            throw new RuntimeException('请先初始化根钱包');
+            throw new RuntimeException('????????');
         }
 
-        $account = (new EvmWalletService())->createNetworkAccount($master, $networkCode);
-        $this->createAccountRelatedRows($account);
-        return $this->sanitizeAccount($account);
+        return WalletMaster::transaction(function () use ($master, $networkCode) {
+            $account = (new EvmWalletService())->createNetworkAccount($master, $networkCode);
+            $this->createAccountRelatedRows($account);
+            return $this->sanitizeAccount($account);
+        });
     }
 
     public function toggleAccount(array $input): array
     {
         $id = (int)($input['id'] ?? 0);
         if ($id <= 0) {
-            throw new InvalidArgumentException('网络账户 ID 无效');
+            throw new InvalidArgumentException('???? ID ??');
         }
 
         $account = WalletAccount::findById($id);
         if (!$account) {
-            throw new RuntimeException('网络账户不存在');
+            throw new RuntimeException('???????');
         }
 
         WalletAccount::updateById($id, ['status' => !empty($input['enabled']) ? 'active' : 'disabled']);
@@ -272,11 +282,11 @@ class WalletService
     {
         $id = (int)($input['id'] ?? 0);
         if ($id <= 0) {
-            throw new InvalidArgumentException('钱包账号 ID 无效');
+            throw new InvalidArgumentException('???? ID ??');
         }
         $account = WalletAccount::findById($id);
         if (!$account) {
-            throw new RuntimeException('网络账户不存在');
+            throw new RuntimeException('???????');
         }
         $this->assertAccountActive($account);
 
@@ -284,14 +294,8 @@ class WalletService
         if (array_key_exists('collection_address', $input)) {
             $data['collection_address'] = strtolower(trim((string)$input['collection_address']));
         }
-        if (array_key_exists('gas_funder_address', $input)) {
-            $data['gas_funder_address'] = strtolower(trim((string)$input['gas_funder_address']));
-        }
         if (array_key_exists('deposit_timeout_minutes', $input)) {
             $data['deposit_timeout_minutes'] = min(1440, max(1, (int)$input['deposit_timeout_minutes']));
-        }
-        if (!empty($input['gas_funder_private_key'])) {
-            $data['encrypted_gas_funder_private_key'] = (new CryptoService())->encrypt(trim((string)$input['gas_funder_private_key']));
         }
         if ($data) {
             WalletAccount::updateById($id, $data);
@@ -336,10 +340,36 @@ class WalletService
         ];
     }
 
+    private function globalGasWallet(): array
+    {
+        $master = WalletMaster::latestActive();
+        if (!$master) {
+            throw new RuntimeException('Root wallet is not initialized');
+        }
+        $wallet = GlobalGasWallet::findByMasterId((int)$master['id']);
+        if (!$wallet) {
+            throw new RuntimeException('Global Gas wallet does not exist');
+        }
+        return $wallet;
+    }
+
+    private function globalGasWalletForOverview(): ?array
+    {
+        $master = WalletMaster::latestActive();
+        if (!$master) {
+            return null;
+        }
+        $wallet = GlobalGasWallet::findByMasterId((int)$master['id']);
+        if (!$wallet) {
+            return null;
+        }
+        $wallet['encrypted_private_key'] = '';
+        return $wallet;
+    }
+
     private function sanitizeAccount(array $account): array
     {
         $account['encrypted_account_xprv'] = '';
-        $account['encrypted_gas_funder_private_key'] = '';
         $account['deposit_timeout_minutes'] = min(1440, max(1, (int)($account['deposit_timeout_minutes'] ?? 10)));
         $account['collection_type'] = in_array(($account['collection_type'] ?? 'local'), ['local', 'exchange'], true) ? $account['collection_type'] : 'local';
         return $account;
@@ -348,7 +378,7 @@ class WalletService
     private function assertAccountActive(array $account): void
     {
         if (($account['status'] ?? '') !== 'active') {
-            throw new RuntimeException('网络账户已停用，请先启用后再操作');
+            throw new RuntimeException('????????????????');
         }
     }
 
@@ -367,7 +397,7 @@ class WalletService
 
         $accountPath = rtrim(trim((string)($account['derivation_path'] ?? '')), '/');
         if (!preg_match("#^m/44'/60'/\d+'/0$#", $accountPath)) {
-            throw new RuntimeException('本地归集钱包派生路径无效，无法恢复本地归集地址');
+            throw new RuntimeException('???????????????????????');
         }
 
         return substr($accountPath, 0, -2) . '/1/0';
@@ -376,7 +406,7 @@ class WalletService
     private function assertEvmAddress(string $address): void
     {
         if (!preg_match('/^0x[a-f0-9]{40}$/', $address)) {
-            throw new InvalidArgumentException('请输入正确的当前网络 EVM 地址，格式必须是 0x 开头的 40 位十六进制地址');
+            throw new InvalidArgumentException('?????????? EVM ???????? 0x ??? 40 ???????');
         }
     }
 
@@ -399,20 +429,13 @@ class WalletService
     private function createAccountRelatedRows(array $account): void
     {
         (new WalletAssetService())->createSystemCollectionAddressForAccount($account);
-        foreach (['USDC', 'USDT'] as $tokenCode) {
-            if (WithdrawSetting::findByAccountToken((int)$account['id'], $tokenCode)) {
-                continue;
-            }
-            WithdrawSetting::saveForAccountToken((int)$account['id'], $tokenCode, [
-                'network_code' => (string)$account['network_code'],
-                'enabled' => 0,
-                'target_address' => '',
-                'min_amount_int' => '0',
-                'max_retry_count' => 3,
-                'status' => 'disabled',
-                'error_message' => '',
-            ]);
-        }
+        GlobalGasWalletBalance::saveForMasterNetwork((int)$account['wallet_master_id'], (string)$account['network_code'], [
+            'native_symbol' => $this->nativeSymbol((string)$account['network_code']),
+            'balance_wei' => '0',
+            'sync_enabled' => 1,
+            'sync_status' => 'pending',
+            'sync_error' => '',
+        ]);
     }
 
     private function groupStats(array $rows): array

@@ -10,7 +10,6 @@ use app\controller\AdminProxyController;
 use app\controller\AdminRpcConfigController;
 use app\controller\AdminSystemController;
 use app\controller\AdminWalletController;
-use app\controller\AdminWithdrawController;
 use app\controller\DepositController;
 use app\controller\EasyPayController;
 use app\controller\IndexController;
@@ -40,8 +39,6 @@ Route::group('/hdupay', function () {
     Route::get('/addresses', [IndexController::class, 'index']);
     Route::get('/orders', [IndexController::class, 'index']);
     Route::get('/collections', [IndexController::class, 'index']);
-    Route::get('/withdraw-settings', [IndexController::class, 'index']);
-    Route::get('/withdrawals', [IndexController::class, 'index']);
     Route::get('/deposit-create', [IndexController::class, 'index']);
     Route::get('/open-api', [IndexController::class, 'index']);
     Route::get('/admin-profile', [IndexController::class, 'index']);
@@ -181,15 +178,4 @@ Route::group('/admin', function () {
         Route::post('/process-one', [AdminCollectionController::class, 'processOne']);
     });
 
-    Route::group('/withdraw', function () {
-        Route::get('/config', [AdminWithdrawController::class, 'config']);
-        Route::post('/config/save', [AdminWithdrawController::class, 'saveConfig']);
-        Route::get('/settings', [AdminWithdrawController::class, 'settings']);
-        Route::post('/setting/save', [AdminWithdrawController::class, 'saveSetting']);
-        Route::get('/list', [AdminWithdrawController::class, 'list']);
-        Route::post('/preview', [AdminWithdrawController::class, 'preview']);
-        Route::post('/create', [AdminWithdrawController::class, 'create']);
-        Route::post('/process-all', [AdminWithdrawController::class, 'processAll']);
-        Route::post('/process-one', [AdminWithdrawController::class, 'processOne']);
-    });
 })->middleware(AdminAuthMiddleware::class);

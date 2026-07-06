@@ -133,19 +133,44 @@ CREATE TABLE IF NOT EXISTS `wallet_accounts` (
   `collection_type` varchar(32) NOT NULL DEFAULT 'local',
   `collection_address` varchar(128) NOT NULL DEFAULT '',
   `collection_derivation_path` varchar(128) NOT NULL DEFAULT '',
-  `gas_funder_address` varchar(128) NOT NULL DEFAULT '',
-  `gas_funder_derivation_path` varchar(128) NOT NULL DEFAULT '',
-  `encrypted_gas_funder_private_key` text NULL,
-  `gas_sync_enabled` tinyint unsigned NOT NULL DEFAULT 1,
-  `gas_native_balance_wei` varchar(100) NOT NULL DEFAULT '0',
-  `gas_sync_status` varchar(32) NOT NULL DEFAULT 'pending',
-  `gas_sync_error` text NULL,
-  `gas_last_balance_sync_at` datetime NULL,
   `status` varchar(32) NOT NULL DEFAULT 'active',
   `created_at` datetime NOT NULL,
   `updated_at` datetime NOT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_network` (`network_code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE IF NOT EXISTS `global_gas_wallets` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `wallet_master_id` bigint unsigned NOT NULL,
+  `address` varchar(64) NOT NULL,
+  `address_lower` varchar(64) NOT NULL,
+  `derivation_path` varchar(128) NOT NULL,
+  `encrypted_private_key` text NOT NULL,
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_wallet_master` (`wallet_master_id`),
+  UNIQUE KEY `uk_address_lower` (`address_lower`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE IF NOT EXISTS `global_gas_wallet_balances` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `wallet_master_id` bigint unsigned NOT NULL,
+  `network_code` varchar(64) NOT NULL,
+  `native_symbol` varchar(16) NOT NULL,
+  `balance_wei` varchar(100) NOT NULL DEFAULT '0',
+  `sync_enabled` tinyint unsigned NOT NULL DEFAULT 1,
+  `sync_status` varchar(32) NOT NULL DEFAULT 'pending',
+  `sync_error` text NULL,
+  `last_balance_sync_at` datetime NULL,
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_master_network` (`wallet_master_id`,`network_code`),
+  KEY `idx_network_code` (`network_code`),
+  KEY `idx_sync_enabled` (`sync_enabled`),
+  KEY `idx_sync_status` (`sync_status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 CREATE TABLE IF NOT EXISTS `wallet_collection_addresses` (
@@ -260,11 +285,13 @@ CREATE TABLE IF NOT EXISTS `collection_tasks` (
   `required_confirmations` int unsigned NOT NULL DEFAULT 0,
   `error_message` text NULL,
   `retry_count` int unsigned NOT NULL DEFAULT 0,
+  `queue_active` tinyint unsigned NOT NULL DEFAULT 0,
   `last_retry_at` datetime NULL,
   `created_at` datetime NOT NULL,
   `updated_at` datetime NOT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_status` (`status`),
+  KEY `idx_queue_active` (`queue_active`),
   KEY `idx_address` (`address_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
@@ -305,52 +332,26 @@ CREATE TABLE IF NOT EXISTS `audit_logs` (
   KEY `idx_action` (`action`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
-CREATE TABLE IF NOT EXISTS `withdrawal_tasks` (
+CREATE TABLE IF NOT EXISTS `task_queue` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `queue_type` varchar(32) NOT NULL,
+  `business_id` bigint unsigned NOT NULL,
   `network_code` varchar(64) NOT NULL,
-  `token_code` varchar(64) NOT NULL,
-  `wallet_account_id` bigint unsigned NOT NULL,
-  `from_address` varchar(128) NOT NULL,
-  `to_address` varchar(128) NOT NULL,
-  `amount_int` varchar(80) NOT NULL,
-  `status` varchar(32) NOT NULL DEFAULT 'pending_withdraw',
-  `gas_funding_tx_hash` varchar(128) NOT NULL DEFAULT '',
-  `withdraw_tx_hash` varchar(128) NOT NULL DEFAULT '',
-  `actual_gas_used` bigint unsigned NOT NULL DEFAULT 0,
-  `actual_gas_price_wei` varchar(100) NOT NULL DEFAULT '',
-  `actual_gas_fee_wei` varchar(100) NOT NULL DEFAULT '',
-  `withdraw_block_number` bigint unsigned NOT NULL DEFAULT 0,
-  `current_confirmations` int unsigned NOT NULL DEFAULT 0,
-  `required_confirmations` int unsigned NOT NULL DEFAULT 0,
-  `error_message` text NULL,
-  `retry_count` int unsigned NOT NULL DEFAULT 0,
-  `max_retry_count` int unsigned NOT NULL DEFAULT 3,
-  `last_retry_at` datetime NULL,
+  `token_code` varchar(64) NOT NULL DEFAULT '',
+  `source` varchar(32) NOT NULL DEFAULT 'auto',
+  `process_status` varchar(32) NOT NULL DEFAULT 'queued',
+  `is_invalid` tinyint unsigned NOT NULL DEFAULT 0,
+  `next_run_at` datetime NULL,
+  `locked_at` datetime NULL,
+  `locked_by` varchar(128) NOT NULL DEFAULT '',
+  `last_error` text NULL,
   `created_at` datetime NOT NULL,
   `updated_at` datetime NOT NULL,
   PRIMARY KEY (`id`),
-  KEY `idx_status` (`status`),
-  KEY `idx_wallet_account` (`wallet_account_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
-CREATE TABLE IF NOT EXISTS `withdraw_settings` (
-  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
-  `wallet_account_id` bigint unsigned NOT NULL,
-  `network_code` varchar(64) NOT NULL,
-  `token_code` varchar(64) NOT NULL,
-  `enabled` tinyint unsigned NOT NULL DEFAULT 0,
-  `target_address` varchar(128) NOT NULL DEFAULT '',
-  `min_amount_int` varchar(80) NOT NULL DEFAULT '0',
-  `max_retry_count` int unsigned NOT NULL DEFAULT 3,
-  `last_run_at` datetime NULL,
-  `status` varchar(32) NOT NULL DEFAULT 'disabled',
-  `error_message` text NULL,
-  `created_at` datetime NOT NULL,
-  `updated_at` datetime NOT NULL,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uniq_account_token` (`wallet_account_id`,`token_code`),
-  KEY `idx_network_token` (`network_code`,`token_code`),
-  KEY `idx_enabled` (`enabled`)
+  KEY `idx_type_business` (`queue_type`,`business_id`),
+  KEY `idx_invalid_status_next` (`is_invalid`,`process_status`,`next_run_at`),
+  KEY `idx_network_invalid_status` (`network_code`,`is_invalid`,`process_status`),
+  KEY `idx_type_invalid_status` (`queue_type`,`is_invalid`,`process_status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 CREATE TABLE IF NOT EXISTS `fiat_exchange_rates` (

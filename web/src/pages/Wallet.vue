@@ -208,9 +208,6 @@
                       <n-button size="tiny" secondary type="primary" @click="openCollectionTarget(account)">
                         修改
                       </n-button>
-                      <n-button v-if="account.collection_type !== 'exchange'" size="tiny" secondary type="warning" @click="openWithdraw(account)">
-                        转出
-                      </n-button>
                     </n-space>
                   </n-space>
                   </n-thing>
@@ -231,7 +228,7 @@
                         circle
                         quaternary
                         size="tiny"
-                        :disabled="!account.gas_funder_address"
+                        :disabled="!globalGasAddress()"
                         :loading="balanceLoading[balanceKey(account, 'gas')]"
                         @click="toggleBalance(account, 'gas')"
                       >
@@ -242,9 +239,9 @@
                     </n-space>
                   </template>
                   <n-space vertical size="small">
-                    <n-ellipsis style="max-width: 100%;"><n-text>{{ account.gas_funder_address || '-' }}</n-text></n-ellipsis>
+                    <n-ellipsis style="max-width: 100%;"><n-text>{{ globalGasAddress() || '-' }}</n-text></n-ellipsis>
                     <n-space size="small">
-                      <n-button size="tiny" quaternary @click="copy(account.gas_funder_address)">
+                      <n-button size="tiny" quaternary :disabled="!globalGasAddress()" @click="copy(globalGasAddress())">
                         <template #icon><n-icon><CopyOutline /></n-icon></template>
                         复制地址
                       </n-button>
@@ -367,66 +364,6 @@
       </template>
     </n-modal>
 
-    <n-modal v-model:show="withdrawShow" preset="dialog" title="本地归集钱包转出">
-      <n-form :model="withdrawForm" label-placement="top">
-        <n-form-item label="网络账户">
-          <NetworkTag :code="withdrawForm.network_code" :label="networkLabel(withdrawForm.network_code)" />
-        </n-form-item>
-        <n-form-item label="来源归集钱包">
-          <n-input v-model:value="withdrawForm.from_address" disabled />
-        </n-form-item>
-        <n-form-item label="转出代币">
-          <n-select v-model:value="withdrawForm.token_code" :options="tokenOptions" :render-label="renderTokenSelectLabel" :render-tag="renderTokenSelectTag" @update:value="scheduleWithdrawPreview" />
-        </n-form-item>
-        <n-form-item :label="`转出数量 ${withdrawForm.token_code || 'USDC'}`">
-          <n-input-group>
-            <n-input
-              v-model:value="withdrawForm.amount"
-              placeholder="请输入转出数量"
-              clearable
-              @update:value="scheduleWithdrawPreview"
-            />
-            <n-button secondary type="primary" @click="setMaxWithdrawAmount">最大</n-button>
-          </n-input-group>
-        </n-form-item>
-        <n-form-item label="接收地址">
-          <n-input
-            v-model:value="withdrawForm.to_address"
-            placeholder="请输入当前网络的接收地址，必须是 0x 开头的 EVM 地址"
-            clearable
-            @update:value="scheduleWithdrawPreview"
-          />
-        </n-form-item>
-      </n-form>
-
-      <n-spin :show="withdrawPreviewLoading">
-          <n-space vertical size="small">
-          <n-space size="small">
-            <TokenAmount :amount="withdrawPreview.token_balance || '-'" :code="withdrawPreview.token_code || withdrawForm.token_code || 'USDC'" />
-            <n-tag type="default" :bordered="false">{{ withdrawNativeSymbol() }} 余额：{{ withdrawPreview.native_balance || '-' }}</n-tag>
-          </n-space>
-          <n-space size="small">
-            <n-tag type="warning" :bordered="false">Gas 钱包 {{ withdrawNativeSymbol() }}：{{ withdrawPreview.gas_funder_balance || '-' }}</n-tag>
-            <n-tag type="info" :bordered="false">预计需要 {{ withdrawPreview.needed_native || '-' }} {{ withdrawNativeSymbol() }}</n-tag>
-            <n-tag v-if="withdrawPreview.shortage_native && withdrawPreview.shortage_native !== '0'" type="error" :bordered="false">
-              需补充 {{ withdrawPreview.shortage_native }} {{ withdrawNativeSymbol() }}
-            </n-tag>
-          </n-space>
-          <n-alert v-if="withdrawForm.to_address && !isValidEvmAddress(withdrawForm.to_address)" type="error" :bordered="false">
-            接收地址格式不正确，必须是 0x 开头的 40 位十六进制地址。
-          </n-alert>
-        </n-space>
-      </n-spin>
-
-      <template #action>
-        <n-space justify="end">
-          <n-button @click="withdrawShow = false">取消</n-button>
-          <n-button type="primary" :loading="withdrawCreating" :disabled="!canCreateWithdraw()" @click="createWithdraw">
-            提交转出任务
-          </n-button>
-        </n-space>
-      </template>
-    </n-modal>
   </n-space>
 </template>
 
@@ -454,7 +391,7 @@ import {
 } from '@vicons/ionicons5'
 import { api } from '../api'
 import { NetworkTag, networkColor, networkLabel, networkTagType, renderNetworkSelectLabel, renderNetworkSelectTag } from '../utils/networks'
-import { fallbackTokenOptions, renderTokenSelectLabel, renderTokenSelectTag, TokenAmount, TokenInline } from '../utils/money'
+import { TokenAmount, TokenInline } from '../utils/money'
 
 type BalanceType = 'collection' | 'gas'
 
@@ -475,9 +412,6 @@ const accountCreateShow = ref(false)
 const accountCreating = ref(false)
 const collectionTargetShow = ref(false)
 const collectionTargetSaving = ref(false)
-const withdrawShow = ref(false)
-const withdrawPreviewLoading = ref(false)
-const withdrawCreating = ref(false)
 const initForm = reactive({ name: 'default', mnemonic: '' })
 const mnemonicWords = ref<string[]>(Array.from({ length: 12 }, () => ''))
 const exportForm = reactive<any>({ wallet_master_id: null, mnemonic: '' })
@@ -485,18 +419,15 @@ const deleteForm = reactive<any>({ wallet_master_id: null, mnemonic: '' })
 const accountForm = reactive<any>({ id: null, network_code: '', deposit_timeout_minutes: 10 })
 const accountCreateForm = reactive<any>({ network_code: null })
 const collectionTargetForm = reactive<any>({ id: null, network_code: '', collection_type: 'local', collection_address: '' })
-const withdrawForm = reactive<any>({ wallet_account_id: null, network_code: '', from_address: '', token_code: 'USDC', amount: '', to_address: '' })
-const withdrawPreview = ref<any>({})
-const tokenOptions = fallbackTokenOptions
 const overview = ref<any>({ masters: [], accounts: [], summary: {} })
 const accountBalances = reactive<Record<string, any>>({})
 const balanceVisible = reactive<Record<string, boolean>>({})
 const balanceLoading = reactive<Record<string, boolean>>({})
 const accountToggleLoading = reactive<Record<number, boolean>>({})
-let withdrawPreviewTimer: number | null = null
 
 const masters = computed(() => overview.value.masters || [])
 const accounts = computed(() => overview.value.accounts || [])
+const globalGasWallet = computed(() => overview.value.global_gas_wallet || null)
 const supportedNetworks = computed(() => overview.value.supported_networks || [])
 const availableNetworks = computed(() => overview.value.available_networks || [])
 const hasActiveRootWallet = computed(() => masters.value.some((item: any) => item.status === 'active'))
@@ -585,12 +516,26 @@ function balanceKey(account: any, type: BalanceType) {
   return `${account.network_code}:${type}`
 }
 
+function globalGasAddress() {
+  return globalGasWallet.value?.address_lower || globalGasWallet.value?.address || ''
+}
+
 function isBalanceVisible(account: any, type: BalanceType) {
   return balanceVisible[balanceKey(account, type)] === true
 }
 
 function balanceNativeSymbol(account: any, type: BalanceType) {
   return accountBalances[balanceKey(account, type)]?.native_symbol || account.native_symbol || networkNativeSymbol(account.network_code)
+}
+
+function networkNativeSymbol(networkCode: string) {
+  const map: Record<string, string> = {
+    ethereum: 'ETH',
+    base: 'ETH',
+    celo: 'CELO',
+    polygon: 'POL'
+  }
+  return map[String(networkCode || '').toLowerCase()] || 'ETH'
 }
 
 function balanceNativeDisplay(account: any, type: BalanceType) {
@@ -835,94 +780,6 @@ function clearBalanceCache(networkCode: string, type: BalanceType) {
   const key = `${networkCode}:${type}`
   delete accountBalances[key]
   delete balanceVisible[key]
-}
-
-function openWithdraw(account: any) {
-  if (account.collection_type === 'exchange') {
-    message.error('交易所归集地址不需要本地转出')
-    return
-  }
-  withdrawForm.wallet_account_id = account.id
-  withdrawForm.network_code = account.network_code
-  withdrawForm.from_address = account.collection_address || ''
-  withdrawForm.token_code = 'USDC'
-  withdrawForm.amount = ''
-  withdrawForm.to_address = ''
-  withdrawPreview.value = {}
-  withdrawShow.value = true
-  loadWithdrawPreview()
-}
-
-function withdrawNativeSymbol() {
-  const account = accounts.value.find((item: any) => Number(item.id) === Number(withdrawForm.wallet_account_id))
-  return withdrawPreview.value.native_symbol || account?.native_symbol || networkNativeSymbol(withdrawForm.network_code)
-}
-
-function networkNativeSymbol(networkCode: string) {
-  const network = supportedNetworks.value.find((item: any) => item.value === networkCode)
-  return network?.native_symbol || 'ETH'
-}
-
-function scheduleWithdrawPreview() {
-  if (withdrawPreviewTimer !== null) {
-    window.clearTimeout(withdrawPreviewTimer)
-  }
-  withdrawPreviewTimer = window.setTimeout(() => {
-    loadWithdrawPreview()
-  }, 500)
-}
-
-async function loadWithdrawPreview() {
-  if (!withdrawForm.wallet_account_id) {
-    return
-  }
-  withdrawPreviewLoading.value = true
-  try {
-    withdrawPreview.value = await api.post('/admin/withdraw/preview', {
-      wallet_account_id: withdrawForm.wallet_account_id,
-      token_code: withdrawForm.token_code,
-      amount: withdrawForm.amount,
-      to_address: withdrawForm.to_address
-    })
-  } catch (e: any) {
-    if (withdrawForm.amount || withdrawForm.to_address) {
-      message.error(e.message)
-    }
-  } finally {
-    withdrawPreviewLoading.value = false
-  }
-}
-
-function setMaxWithdrawAmount() {
-  withdrawForm.amount = withdrawPreview.value.token_balance || ''
-  scheduleWithdrawPreview()
-}
-
-function canCreateWithdraw() {
-  return Boolean(withdrawForm.wallet_account_id)
-    && Boolean(withdrawForm.amount)
-    && isValidEvmAddress(withdrawForm.to_address)
-    && !withdrawPreviewLoading.value
-}
-
-async function createWithdraw() {
-  withdrawCreating.value = true
-  try {
-    await api.post('/admin/withdraw/create', {
-      wallet_account_id: withdrawForm.wallet_account_id,
-      token_code: withdrawForm.token_code,
-      amount: withdrawForm.amount,
-      to_address: withdrawForm.to_address
-    })
-    clearBalanceCache(withdrawForm.network_code, 'collection')
-    message.success('转出任务已创建')
-    withdrawShow.value = false
-  await router.push('/hdupay/withdrawals')
-  } catch (e: any) {
-    message.error(e.message)
-  } finally {
-    withdrawCreating.value = false
-  }
 }
 
 async function copy(value: string) {

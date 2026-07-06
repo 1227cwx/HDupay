@@ -60,21 +60,6 @@
       </template>
     </n-modal>
 
-    <n-modal v-model:show="withdrawShow" preset="dialog" title="本地归集钱包转出">
-      <n-form :model="withdrawForm" label-placement="top">
-        <n-form-item label="归集钱包"><n-input v-model:value="withdrawForm.from_address" disabled /></n-form-item>
-        <n-form-item label="代币"><n-select v-model:value="withdrawForm.token_code" :options="withdrawTokenOptions" :render-label="renderTokenSelectLabel" :render-tag="renderTokenSelectTag" @update:value="applyWithdrawTarget" /></n-form-item>
-        <n-form-item label="转出接收地址"><n-input v-model:value="withdrawForm.to_address" disabled /></n-form-item>
-        <n-form-item label="转出数量">
-          <n-input v-model:value="withdrawForm.amount" placeholder="请输入转出数量">
-            <template #suffix><n-button text type="primary" @click="fillMax">最大</n-button></template>
-          </n-input>
-        </n-form-item>
-      </n-form>
-      <template #action>
-        <n-space justify="end"><n-button @click="withdrawShow = false">取消</n-button><n-button type="primary" :loading="withdrawing" :disabled="!canWithdraw" @click="createWithdraw">创建转出任务</n-button></n-space>
-      </template>
-    </n-modal>
   </n-space>
 </template>
 
@@ -85,31 +70,25 @@ import { RefreshOutline, SearchOutline } from '@vicons/ionicons5'
 import { api } from '../api'
 import { NetworkTag, renderNetworkSelectLabel, renderNetworkSelectTag, shortNetworkOptions, networkLabel } from '../utils/networks'
 import { renderShortText } from '../utils/shortText'
-import { renderTokenAmount, renderTokenSelectLabel, renderTokenSelectTag, renderTokenTag } from '../utils/money'
+import { renderTokenAmount, renderTokenTag } from '../utils/money'
 
 const message = useMessage()
 const loading = ref(false)
 const savingConfig = ref(false)
 const syncingAll = ref(false)
 const adding = ref(false)
-const withdrawing = ref(false)
 const addShow = ref(false)
-const withdrawShow = ref(false)
 const accounts = ref<any[]>([])
-const withdrawSettings = ref<any[]>([])
 const activeTab = ref('')
 const syncEnabled = ref(true)
 const syncInterval = ref(60)
 const filters = reactive<any>({ network_code: null })
 const appliedFilters = reactive<any>({ network_code: null })
 const addForm = reactive<any>({ wallet_account_id: 0, network_code: '', address: '' })
-const withdrawForm = reactive<any>({ wallet_account_id: 0, from_address: '', token_code: 'USDC', to_address: '', amount: '', max_amount: '', usdc_balance: '', usdt_balance: '' })
 const rowLoading = reactive<Record<string, boolean>>({})
 const networkOptions = shortNetworkOptions
 
 const filteredAccounts = computed(() => accounts.value.filter(account => !appliedFilters.network_code || account.network_code === appliedFilters.network_code))
-const withdrawTokenOptions = computed(() => withdrawSettings.value.filter(item => Number(item.wallet_account_id) === Number(withdrawForm.wallet_account_id) && item.target_address).map(item => ({ label: `${item.token_code} -> ${item.target_address}`, value: item.token_code })))
-const canWithdraw = computed(() => withdrawForm.wallet_account_id && withdrawForm.to_address && withdrawForm.amount && withdrawForm.token_code)
 
 const columns = [
   { title: '地址', key: 'address', width: 140, render: (row: any) => renderShortText(row.address) },
@@ -133,7 +112,6 @@ function renderSyncStatus(row: any) {
 function renderActions(row: any) {
   return h(NSpace, { wrap: false }, { default: () => [
     h(NButton, { size: 'small', secondary: true, type: 'primary', loading: rowLoading[`sync-one-${row.id}`], onClick: () => syncOne(row) }, { default: () => '同步' }),
-    h(NButton, { size: 'small', secondary: true, type: 'warning', disabled: row.address_type !== 'system' || Number(row.is_active) !== 1, onClick: () => openWithdraw(row) }, { default: () => '转出' }),
     row.address_type === 'third_party' ? h(NPopconfirm, { onPositiveClick: () => deleteAddress(row) }, { trigger: () => h(NButton, { size: 'small', secondary: true, type: 'error' }, { default: () => '删除' }), default: () => '确认删除该归集地址？' }) : null
   ] })
 }
@@ -141,11 +119,10 @@ function renderActions(row: any) {
 async function load() {
   loading.value = true
   try {
-    const [data, withdrawData]: any[] = await Promise.all([api.get('/admin/wallet/collection-wallets'), api.get('/admin/withdraw/settings')])
+    const data: any = await api.get('/admin/wallet/collection-wallets')
     accounts.value = data.accounts || []
     syncEnabled.value = Number(data.settings?.balance_sync_enabled ?? 1) === 1
     syncInterval.value = Number(data.settings?.balance_sync_interval_minutes || 60)
-    withdrawSettings.value = withdrawData.settings || []
     if (!activeTab.value && accounts.value.length) activeTab.value = accounts.value[0].network_code
   } catch (e: any) { message.error(e.message) } finally { loading.value = false }
 }
@@ -159,9 +136,5 @@ async function toggleActive(row: any, value: boolean) { rowLoading[`active-${row
 async function toggleSync(row: any, value: boolean) { rowLoading[`sync-${row.id}`] = true; try { const data: any = await api.post('/admin/wallet/collection-address/sync-toggle', { id: row.id, sync_enabled: value }); accounts.value = data.accounts || accounts.value; message.success('同步状态已更新') } catch (e: any) { message.error(e.message) } finally { rowLoading[`sync-${row.id}`] = false } }
 async function syncOne(row: any) { rowLoading[`sync-one-${row.id}`] = true; try { const data: any = await api.post('/admin/wallet/collection-address/sync', { id: row.id }); accounts.value = data.accounts || accounts.value; message.success('余额同步完成') } catch (e: any) { message.error(e.message) } finally { rowLoading[`sync-one-${row.id}`] = false } }
 async function deleteAddress(row: any) { try { const data: any = await api.post('/admin/wallet/collection-address/delete', { id: row.id }); accounts.value = data.accounts || accounts.value; message.success('归集地址已删除') } catch (e: any) { message.error(e.message) } }
-function openWithdraw(row: any) { Object.assign(withdrawForm, { wallet_account_id: row.wallet_account_id, from_address: row.address, token_code: 'USDC', to_address: '', amount: '', max_amount: '', usdc_balance: row.usdc_balance, usdt_balance: row.usdt_balance }); const first = withdrawSettings.value.find(item => Number(item.wallet_account_id) === Number(row.wallet_account_id) && item.target_address); if (first) { withdrawForm.token_code = first.token_code; applyWithdrawTarget() } withdrawShow.value = true }
-function applyWithdrawTarget() { const setting = withdrawSettings.value.find(item => Number(item.wallet_account_id) === Number(withdrawForm.wallet_account_id) && item.token_code === withdrawForm.token_code); withdrawForm.to_address = setting?.target_address || ''; withdrawForm.max_amount = withdrawForm.token_code === 'USDT' ? withdrawForm.usdt_balance : withdrawForm.usdc_balance }
-function fillMax() { applyWithdrawTarget(); withdrawForm.amount = withdrawForm.max_amount || '' }
-async function createWithdraw() { withdrawing.value = true; try { await api.post('/admin/withdraw/create', { wallet_account_id: withdrawForm.wallet_account_id, token_code: withdrawForm.token_code, to_address: withdrawForm.to_address, amount: withdrawForm.amount }); message.success('转出任务已创建'); withdrawShow.value = false } catch (e: any) { message.error(e.message) } finally { withdrawing.value = false } }
 onMounted(load)
 </script>

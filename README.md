@@ -1,8 +1,10 @@
-# ⚠️ 重要声明 / Disclaimer
+# ⚠️ Important Disclaimer
 
-> **本项目仅用于开发者学习区块链、HD 钱包、EVM 稳定币收款与 Webman 项目开发实践。**  
-> 本开源项目不构成任何投资建议、支付牌照建议、金融业务建议或生产环境安全承诺。使用者基于本项目进行部署、改造、二次开发、收款、转账、归集、提现、对接第三方系统等任何行为，均由使用者自行承担全部责任，与本项目作者、维护者及贡献者无关。  
-> 请勿将本项目用于任何违法违规用途。涉及真实资产前，请务必完成代码审计、安全加固、权限隔离、私钥管理、风控合规与小额充分测试。
+English | [简体中文](README.zh-CN.md)
+
+> **This project is intended solely for developers learning about blockchain, HD wallets, EVM stablecoin payment collection, and Webman application development.**
+> This open-source project does not constitute investment advice, payment licensing advice, financial business advice, or a guarantee of production security. Users bear full responsibility for any deployment, modification, derivative development, payment collection, transfers, fund sweeping, third-party integration, or other use of this project. Its authors, maintainers, and contributors accept no responsibility for such activities.
+> Do not use this project for illegal or non-compliant purposes. Before handling real assets, complete code audits, security hardening, permission isolation, private-key management, risk and compliance reviews, and thorough testing with small amounts.
 
 ---
 
@@ -17,191 +19,190 @@
   <img src="https://img.shields.io/badge/MySQL-5.7%2B-4479A1?style=for-the-badge&logo=mysql&logoColor=white" />
 </p>
 
-**HDupay** 是一个基于 **Webman + Vue3 + Naive UI** 的开源加密货币稳定币收款平台示例项目，核心目标是演示：
+**HDupay** is an open-source example platform for cryptocurrency stablecoin payment collection, built with **Webman + Vue3 + Naive UI**. It demonstrates:
 
-- 🧠 基于助记词的 HD 钱包体系
-- 🔗 EVM 多网络收款地址派生
-- 💵 USDC / USDT 稳定币订单收款
-- 📡 RPC 扫块监听与确认进度
-- 🧾 OpenAPI / 易支付兼容接口
-- 🏦 归集钱包、Gas 钱包与自动归集任务
-- 🎛️ 后台管理端的完整业务闭环
+- 🧠 Mnemonic-based HD wallet architecture
+- 🔗 Payment address derivation across multiple EVM networks
+- 💵 USDC / USDT order payments
+- 📡 RPC block scanning, monitoring, and confirmation progress
+- 🧾 OpenAPI and Epay-compatible interfaces
+- 🏦 Collection wallets, Gas wallets, and automated fund sweeping
+- 🎛️ A complete business workflow in the administration console
 
 <p align="center">
-  <a href="#features"><kbd>✨ 项目亮点</kbd></a>
-  <a href="#networks"><kbd>🌍 支持网络</kbd></a>
-  <a href="#currencies"><kbd>💵 支持货币</kbd></a>
-  <a href="#tech-stack"><kbd>🧱 技术栈</kbd></a>
-  <a href="#modules"><kbd>🧩 系统模块</kbd></a>
-  <a href="#requirements"><kbd>🖥️ 运行环境</kbd></a>
-  <a href="#install"><kbd>🚀 快速安装</kbd></a>
+  <a href="#features"><kbd>✨ Highlights</kbd></a>
+  <a href="#networks"><kbd>🌍 Supported Networks</kbd></a>
+  <a href="#currencies"><kbd>💵 Supported Currencies</kbd></a>
+  <a href="#tech-stack"><kbd>🧱 Technology Stack</kbd></a>
+  <a href="#modules"><kbd>🧩 System Modules</kbd></a>
+  <a href="#requirements"><kbd>🖥️ System Requirements</kbd></a>
+  <a href="#install"><kbd>🚀 Quick Installation</kbd></a>
   <br/>
-  <a href="#access"><kbd>🔗 访问入口</kbd></a>
-  <a href="#rpc-proxy"><kbd>📡 RPC 与代理</kbd></a>
+  <a href="#access"><kbd>🔗 Access Points</kbd></a>
+  <a href="#rpc-proxy"><kbd>📡 RPC and Proxies</kbd></a>
   <a href="#openapi"><kbd>🔌 OpenAPI</kbd></a>
-  <a href="#epay"><kbd>🧩 易支付</kbd></a>
-  <a href="#new-api"><kbd>🔗 New-Api 接入</kbd></a>
-  <a href="#security"><kbd>🏦 安全建议</kbd></a>
-  <a href="#project-structure"><kbd>📁 项目结构</kbd></a>
-  <a href="#faq"><kbd>🛠️ 常见问题</kbd></a>
+  <a href="#epay"><kbd>🧩 Epay</kbd></a>
+  <a href="#new-api"><kbd>🔗 New-Api Integration</kbd></a>
+  <a href="#security"><kbd>🏦 Security Recommendations</kbd></a>
+  <a href="#project-structure"><kbd>📁 Project Structure</kbd></a>
+  <a href="#faq"><kbd>🛠️ FAQ</kbd></a>
 </p>
 
 ---
 
 <a id="features"></a>
 
-## ✨ 项目亮点
+## ✨ Highlights
 
-| 模块 | 能力 |
+| Module | Capability |
 |---|---|
-| 🔐 HD 钱包 | 支持助记词初始化根钱包、网络账户派生、收款子地址派生 |
-| 🌐 多网络 | 当前支持 Ethereum、Base、Celo、Polygon 四条 EVM 主网 |
-| 💰 稳定币 | 当前支持 USDC、USDT |
-| 📦 地址池 | 用户下单后动态分配一次性收款地址，超时冻结 |
-| 📡 链上监听 | 通过 EVM RPC `eth_getLogs` 扫描 ERC20 Transfer 日志 |
-| ✅ 区块确认 | 按网络配置确认块数，前端显示确认进度 |
-| 🏦 自动归集 | 支持归集任务、Gas 补充、归集失败原因与重试次数 |
-| 🚀 转出任务 | 支持本地归集钱包转出到后台配置的目标地址 |
-| 🔌 OpenAPI | 提供 API Key / API Secret 鉴权的开放接口 |
-| 🧩 易支付兼容 | 提供 `/submit.php` 兼容易支付协议风格的跳转入口 |
-| 🧭 RPC 管理 | 支持 Infura、Dwellir、OnFinality，支持分组、轮询与重试 |
-| 🧦 代理池 | 支持 HTTP / HTTPS / SOCKS5 代理，并可强制绑定 RPC 请求 |
-| 📈 汇率同步 | 通过 CoinGecko 同步 USDC / USDT 对多法币价格 |
-| 🎨 后台 UI | Vue3 + Naive UI，提供管理后台、支付页、二维码展示 |
+| 🔐 HD wallets | Initialize a root wallet from a mnemonic and derive network accounts and payment sub-addresses |
+| 🌐 Multiple networks | Ethereum, Base, Celo, and Polygon EVM mainnets |
+| 💰 Stablecoins | USDC and USDT support |
+| 📦 Address pool | Dynamically assign one-time payment addresses to orders and freeze them on timeout |
+| 📡 On-chain monitoring | Scan ERC20 Transfer logs through EVM RPC `eth_getLogs` |
+| ✅ Block confirmations | Configure confirmation counts per network and display progress in the frontend |
+| 🏦 Automated sweeping | Sweeping tasks, Gas funding, failure reasons, and retry counts |
+| 🔌 OpenAPI | Public interfaces authenticated with an API Key / API Secret |
+| 🧩 Epay compatibility | An Epay-style redirect entry point at `/submit.php` |
+| 🧭 RPC management | Infura, Dwellir, and OnFinality support, with grouping, round-robin selection, and retries |
+| 🧦 Proxy pool | HTTP / HTTPS / SOCKS5 proxies with enforced routing for bound RPC requests |
+| 📈 Exchange-rate synchronization | Synchronize USDC / USDT prices against multiple fiat currencies through CoinGecko |
+| 🎨 Administration UI | Vue3 + Naive UI administration console, payment page, and QR codes |
 
 ---
 
 <a id="networks"></a>
 
-## 🌍 支持网络
+## 🌍 Supported Networks
 
-| 网络 | Chain ID | Gas 原生币 | 当前状态 | 支持稳定币 |
+| Network | Chain ID | Native Gas Token | Status | Supported Stablecoins |
 |---|---:|---|---|---|
-| 🔷 Ethereum Mainnet | `1` | ETH | ✅ 已支持 | 🔵 USDC / 🟢 USDT |
-| 🔵 Base Mainnet | `8453` | ETH | ✅ 已支持 | 🔵 USDC / 🟢 USDT |
-| 🟡 Celo Mainnet | `42220` | CELO | ✅ 已支持 | 🔵 USDC / 🟢 USDT |
-| 🟣 Polygon PoS Mainnet | `137` | POL | ✅ 已支持 | 🔵 USDC / 🟢 USDT |
+| 🔷 Ethereum Mainnet | `1` | ETH | ✅ Supported | 🔵 USDC / 🟢 USDT |
+| 🔵 Base Mainnet | `8453` | ETH | ✅ Supported | 🔵 USDC / 🟢 USDT |
+| 🟡 Celo Mainnet | `42220` | CELO | ✅ Supported | 🔵 USDC / 🟢 USDT |
+| 🟣 Polygon PoS Mainnet | `137` | POL | ✅ Supported | 🔵 USDC / 🟢 USDT |
 
-> 当前项目主要面向 **EVM 网络**。如果需要接入 Tron、Solana 等非 EVM 网络，需要额外实现地址派生、签名、扫描与归集逻辑。
+> This project primarily targets **EVM networks**. Integrating non-EVM networks such as Tron or Solana requires additional address derivation, signing, scanning, and fund-sweeping implementations.
 
 ---
 
 <a id="currencies"></a>
 
-## 💵 支持货币
+## 💵 Supported Currencies
 
-### 加密货币
+### Cryptocurrencies
 
-| 代币 | 名称 | 说明 |
+| Token | Name | Description |
 |---|---|---|
-| 🔵 USDC | USD Coin | 当前默认稳定币之一 |
-| 🟢 USDT | Tether USD | 当前默认稳定币之一 |
+| 🔵 USDC | USD Coin | One of the currently supported default stablecoins |
+| 🟢 USDT | Tether USD | One of the currently supported default stablecoins |
 
-### 法币汇率
+### Fiat Exchange Rates
 
-当前汇率模块支持常见法币，例如：
+The exchange-rate module supports common fiat currencies, including:
 
-`CNY`、`USD`、`EUR`、`CAD`、`AUD`、`JPY`、`HKD`、`GBP`、`SGD`
+`CNY`, `USD`, `EUR`, `CAD`, `AUD`, `JPY`, `HKD`, `GBP`, `SGD`
 
-下单时系统会根据后台同步的稳定币价格计算应付稳定币数量，并按稳定币最小颗粒度向上取整。
+When an order is placed, the system calculates the stablecoin amount payable using prices synchronized in the administration console, rounding up to the smallest unit of the stablecoin.
 
 ---
 
 <a id="tech-stack"></a>
 
-## 🧱 技术栈
+## 🧱 Technology Stack
 
-### 后端
+### Backend
 
-| 技术 | 用途 |
+| Technology | Purpose |
 |---|---|
-| 🐘 PHP 8.4+ | 运行环境 |
-| ⚡ Webman 2.x | HTTP 框架 |
-| 🚀 Workerman 5.x | 常驻进程与高性能网络服务 |
-| 🌀 Swoole Event Loop | 协程事件循环支持 |
-| 🗄️ webman/database | MySQL 数据访问 |
-| 📡 Hyperf Guzzle | 协程友好的 HTTP 客户端 |
-| 🔐 BitWasp Bitcoin | BIP39 / BIP32 相关能力 |
-| 🧮 web3p/ethereum-* | EVM 地址、签名、交易相关能力 |
-| 🧂 Sodium | 敏感信息加密 |
+| 🐘 PHP 8.4+ | Runtime environment |
+| ⚡ Webman 2.x | HTTP framework |
+| 🚀 Workerman 5.x | Persistent processes and high-performance network services |
+| 🌀 Swoole Event Loop | Coroutine event-loop support |
+| 🗄️ webman/database | MySQL data access |
+| 📡 Hyperf Guzzle | Coroutine-friendly HTTP client |
+| 🔐 BitWasp Bitcoin | BIP39 / BIP32 functionality |
+| 🧮 web3p/ethereum-* | EVM addresses, signatures, and transactions |
+| 🧂 Sodium | Encryption of sensitive information |
 
-### 前端
+### Frontend
 
-| 技术 | 用途 |
+| Technology | Purpose |
 |---|---|
-| 🟢 Vue 3 | 前端框架 |
-| ⚡ Vite | 构建工具 |
-| 🎨 Naive UI | 后台 UI 组件库 |
-| 🧭 Vue Router | 前端路由 |
-| 🍍 Pinia | 状态管理 |
-| 🎯 TypeScript | 类型支持 |
+| 🟢 Vue 3 | Frontend framework |
+| ⚡ Vite | Build tooling |
+| 🎨 Naive UI | Administration UI component library |
+| 🧭 Vue Router | Frontend routing |
+| 🍍 Pinia | State management |
+| 🎯 TypeScript | Type support |
 
 ---
 
 <a id="modules"></a>
 
-## 🧩 系统模块
+## 🧩 System Modules
 
 ```text
 HDupay
-├── 🎛️ 管理后台 /hdupay
-│   ├── 概览
-│   ├── RPC 节点 / 网络配置 / 代理池
-│   ├── 钱包设置 / 归集钱包 / Gas 钱包
-│   ├── 交易订单 / 地址池 / 归集记录 / 转出记录
-│   └── API 设置 / 汇率设置 / 系统设置
+├── 🎛️ Administration console /hdupay
+│   ├── Overview
+│   ├── RPC nodes / Network configuration / Proxy pool
+│   ├── Wallet settings / Collection wallets / Gas wallets
+│   ├── Transaction orders / Address pool / Sweeping records
+│   └── API settings / Exchange-rate settings / System settings
 │
-├── 💳 公共支付页 /pay
-│   ├── 网络选择
-│   ├── 稳定币选择
-│   ├── 二维码展示
-│   └── 链上确认进度
+├── 💳 Public payment page /pay
+│   ├── Network selection
+│   ├── Stablecoin selection
+│   ├── QR code display
+│   └── On-chain confirmation progress
 │
 ├── 🔌 OpenAPI /api/v1
-│   ├── 查询可用网络
-│   ├── 创建订单
-│   └── 查询订单状态
+│   ├── Query available networks
+│   ├── Create orders
+│   └── Query order status
 │
-└── 🧩 易支付兼容入口 /submit.php
+└── 🧩 Epay-Compatible Endpoint /submit.php
 ```
 
 ---
 
 <a id="requirements"></a>
 
-## 🖥️ 运行环境要求
+## 🖥️ System Requirements
 
-| 环境 | 版本要求 |
+| Environment | Version Requirement |
 |---|---|
 | PHP | **8.4+** |
-| MySQL | **5.7+**，推荐 8.0+ |
+| MySQL | **5.7+**, with 8.0+ recommended |
 | Composer | **2.10+** |
-| Node.js | 推荐 20+ |
-| NPM | 推荐 10+ |
-| Redis | 可选，推荐安装 |
-| Linux | 推荐生产环境使用 Linux |
+| Node.js | Recommended 20+ |
+| NPM | Recommended 10+ |
+| Redis | Optional, but recommended |
+| Linux | Recommended for production |
 
-### PHP 扩展要求
+### Required PHP Extensions
 
-请确认以下扩展已安装并启用：
+Ensure that the following extensions are installed and enabled:
 
-| 扩展 | 说明 |
+| Extension | Description |
 |---|---|
-| `swoole` | Webman 协程事件循环建议使用 |
-| `pdo` / `pdo_mysql` | MySQL 数据库连接 |
-| `sodium` | 钱包助记词、API Secret 等敏感信息加密 |
-| `gmp` | HD 钱包 / 椭圆曲线计算依赖 |
-| `bcmath` | 高精度数值计算 |
-| `openssl` | 加密与随机数能力 |
-| `curl` | Guzzle HTTP 请求与代理支持 |
-| `mbstring` | 字符串处理 |
-| `json` | JSON 编解码 |
-| `ctype` / `filter` / `iconv` / `session` | Webman 与依赖包基础能力 |
-| `pcntl` / `posix` | Linux 下 Workerman 进程管理 |
-| `opcache` | 生产环境推荐 |
-| `redis` | 如果启用 Redis 相关能力建议安装 |
+| `swoole` | Recommended for the Webman coroutine event loop |
+| `pdo` / `pdo_mysql` | MySQL database connections |
+| `sodium` | Encrypt wallet mnemonics, API Secrets, and other sensitive information |
+| `gmp` | HD wallet / elliptic-curve computation dependency |
+| `bcmath` | High-precision arithmetic |
+| `openssl` | Encryption and randomness |
+| `curl` | Guzzle HTTP requests and proxy support |
+| `mbstring` | String processing |
+| `json` | JSON encoding and decoding |
+| `ctype` / `filter` / `iconv` / `session` | Basic functionality required by Webman and its dependencies |
+| `pcntl` / `posix` | Workerman process management on Linux |
+| `opcache` | Recommended for production |
+| `redis` | Recommended when Redis functionality is enabled |
 
-检查示例：
+Example checks:
 
 ```bash
 php -v
@@ -213,48 +214,48 @@ composer -V
 
 <a id="install"></a>
 
-## 🚀 快速安装
+## 🚀 Quick Installation
 
-### 1️⃣ 克隆项目
+### 1️⃣ Clone the project
 
 ```bash
 git clone <your-repository-url> HDupay
 cd HDupay
 ```
 
-### 2️⃣ 安装后端依赖
+### 2️⃣ Install Backend Dependencies
 
 ```bash
 composer install
 ```
 
-生产环境可使用：
+For production, you can use:
 
 ```bash
 composer install --no-dev --optimize-autoloader
 ```
 
-### 3️⃣ 导入数据库
+### 3️⃣ Import the database
 
-请先准备好目标数据库（如 `hdupay`），然后导入项目 SQL 文件：
+Prepare the target database (for example, `hdupay`), then import the project SQL file:
 
 ```bash
 mysql -uroot -p hdupay < database/schema.sql
 ```
 
-然后修改数据库连接配置：
+Next, update the database connection configuration:
 
 ```text
 config/database.php
 ```
 
-如果项目中没有该文件，可以先复制示例文件：
+If this file does not exist, copy the example first:
 
 ```bash
 cp config/database.example.php config/database.php
 ```
 
-请根据你的实际环境修改：
+Update these values for your environment:
 
 ```php
 'host'     => '127.0.0.1',
@@ -264,67 +265,67 @@ cp config/database.example.php config/database.php
 'password' => 'your_password',
 ```
 
-> ⚠️ 生产环境请勿使用弱密码，数据库账号建议只授予当前库所需权限。
+> ⚠️ Do not use weak passwords in production. Grant the database account only the permissions required for the application database.
 
 ---
 
-## 🔐 创建 `.env` 文件
+## 🔐 Create the `.env` File
 
-项目根目录需要创建 `.env` 文件，用于保存敏感配置。
+Create a `.env` file in the project root to store sensitive configuration.
 
-如果项目中没有 `.env.example`，可以手动创建：
+If there is no `.env.example`, create it manually:
 
 ```bash
 cat > .env <<'EOF'
-# 必填：钱包、API Secret 等敏感信息加密密钥
-# 生成方式：php -r "echo bin2hex(random_bytes(32)), PHP_EOL;"
-WALLET_ENCRYPTION_KEY=请替换为64位随机hex字符串
+# Required: encryption key for wallet data, API Secrets, and other sensitive information
+# Generate with: php -r "echo bin2hex(random_bytes(32)), PHP_EOL;"
+WALLET_ENCRYPTION_KEY=replace_with_a_64_character_random_hex_string
 
 EOF
 ```
 
-生成安全密钥：
+Generate a secure key:
 
 ```bash
 php -r "echo bin2hex(random_bytes(32)), PHP_EOL;"
 ```
 
-这个秘钥可以自己使用其他加密方式生成，生成后复制进去就行。
+You can also use another suitable cryptographic method to generate the key, then copy it into the file.
 
-> 🔥 **重要：** 一旦正式使用并写入加密数据后，不要随意更换 `WALLET_ENCRYPTION_KEY`，否则可能导致已加密的敏感信息无法解密。
+> 🔥 **Important:** Once the application is in use and encrypted data has been written, do not casually change `WALLET_ENCRYPTION_KEY`. Doing so may make existing encrypted sensitive information impossible to decrypt.
 
 ---
 
-## 🎨 前端安装与编译
+## 🎨 Frontend Installation and Build
 
-> 💡 提示：安装不需要编译，项目默认已编译。只有修改 `web/` 前端源码时，才需要重新执行编译命令。
+> 💡 Note: A frontend build is not required for installation; compiled assets are already included. Rebuild only when you modify the frontend source in `web/`.
 
-前端项目位于：
+The frontend project is located in:
 
 ```text
 web/
 ```
 
-安装依赖：
+Install dependencies:
 
 ```bash
 cd web
 npm install
 ```
 
-开发模式：
+Development mode:
 
 ```bash
 npm run dev
 ```
 
-编译生产产物：
+Build production assets:
 
 ```bash
 npm run build
 ```
 
-编译后的文件会输出到项目根目录：
+The compiled files are output to the following directory in the project root:
 
 ```text
 public/
@@ -332,33 +333,33 @@ public/
 
 ---
 
-## ▶️ 启动项目
+## ▶️ Start the Project
 
-### 开发模式
+### Development mode
 
 ```bash
 php webman start
 ```
 
-或：
+Alternatively:
 
 ```bash
 php start.php start
 ```
 
-默认监听：
+Default listening address:
 
 ```text
 http://127.0.0.1:2828
 ```
 
-### 守护进程模式
+### Daemon mode
 
 ```bash
 php webman start -d
 ```
 
-常用命令：
+Common commands:
 
 ```bash
 php webman status
@@ -366,7 +367,7 @@ php webman restart
 php webman stop
 ```
 
-Windows 本地开发可尝试：
+For local Windows development, try:
 
 ```bash
 php windows.php
@@ -376,17 +377,17 @@ php windows.php
 
 <a id="access"></a>
 
-## 🔗 访问入口
+## 🔗 Access Points
 
-| 入口 | 路径 | 说明 |
+| Entry Point | Path | Description |
 |---|---|---|
-| 🎛️ 管理后台 | `/hdupay/login` | 管理员登录入口 |
-| 💳 支付页面 | `/pay` | 用户公开收款页面 |
-| 🔌 OpenAPI | `/api/v1` | API 调用入口 |
-| 🧩 易支付兼容 | `/submit.php` | 易支付协议风格跳转入口 |
-| 🛡️ 管理接口 | `/admin` | 后台接口前缀 |
+| 🎛️ Administration console | `/hdupay/login` | Administrator login |
+| 💳 Payment page | `/pay` | Public payment collection page |
+| 🔌 OpenAPI | `/api/v1` | API entry point |
+| 🧩 Epay compatibility | `/submit.php` | Epay-style redirect entry point |
+| 🛡️ Administration API | `/admin` | Administration API prefix |
 
-示例：
+Examples:
 
 ```text
 http://127.0.0.1:2828/hdupay/login
@@ -395,109 +396,109 @@ http://127.0.0.1:2828/pay
 
 ---
 
-### 🔐 默认管理员
+### 🔐 Default Administrator
 
-导入 `database/schema.sql` 后，会写入一个默认管理员账号：
+Importing `database/schema.sql` creates a default administrator account:
 
-| 项目 | 内容 |
+| Item | Value |
 |---|---|
-| 登录地址 | `/hdupay/login` |
-| 账号 | `admin` |
-| 密码 | `Admin@123456` |
+| Login URL | `/hdupay/login` |
+| Username | `admin` |
+| Password | `Admin@123456` |
 
-> ⚠️ 首次登录后请立即进入「系统设置」修改管理员账号和密码。
+> ⚠️ Immediately after your first login, open System Settings and change the administrator username and password.
 
 ---
 
 <a id="rpc-proxy"></a>
 
-## 📡 RPC 与代理
+## 📡 RPC and Proxies
 
-当前支持的 RPC 提供商：
+Supported RPC providers:
 
-| 提供商 | 支持情况 | 说明 |
+| Provider | Support | Description |
 |---|---|---|
-| Infura | ✅ | 支持 API Key Secret |
-| Dwellir | ✅ | API Key 模式 |
-| OnFinality | ✅ | API Key 模式 |
+| Infura | ✅ | Supports API Key Secret |
+| Dwellir | ✅ | API Key mode |
+| OnFinality | ✅ | API Key mode |
 
-代理池支持：
+Supported proxy types:
 
 - 🌐 HTTP
 - 🔒 HTTPS
 - 🧦 SOCKS5 / SOCKS5H
 
-> 如果 RPC 节点绑定了代理，请求会强制走代理，不会自动回退直连。这样可以明确区分代理故障与 RPC 故障。
+> If an RPC node is bound to a proxy, its requests must use that proxy and will not automatically fall back to a direct connection. This makes it possible to distinguish proxy failures from RPC failures.
 
 ---
 
 <a id="openapi"></a>
 
-## 🔌 OpenAPI 简要说明
+## 🔌 OpenAPI Overview
 
-OpenAPI 统一使用：
+OpenAPI uses the following entry point:
 
 ```text
 POST /api/v1
 ```
 
-鉴权方式：
+Authentication:
 
 ```http
 x-api-key:     your_api_key
 x-api-secret:  your_api_secret
 ```
 
-接口列表：
+Endpoints:
 
-| 接口 | 方法 | 说明 |
+| Endpoint | Method | Description |
 |---|---|---|
-| `/api/v1/networks` | POST | 查询当前可用收款网络 |
-| `/api/v1/orders/create` | POST | 创建支付订单，返回支付链接 |
-| `/api/v1/orders/status` | POST | 查询订单支付状态与百分比进度 |
+| `/api/v1/networks` | POST | Query currently available payment collection networks |
+| `/api/v1/orders/create` | POST | Create a payment order and return its payment link |
+| `/api/v1/orders/status` | POST | Query payment status and progress as a percentage |
 
 ---
 
 <a id="epay"></a>
 
-## 🧩 易支付兼容入口
+## 🧩 Epay-Compatible Endpoint
 
-项目提供易支付风格入口：
+The project provides an Epay-style entry point:
 
 ```text
 GET/POST /submit.php
 ```
 
-说明：
+Description:
 
-- `pid` 复用后台 OpenAPI 的 API Key
-- 签名密钥复用 API Key Secret
-- `type` 字段会被兼容接收，但系统不依赖该字段决定支付方式
-- 成功后返回可跳转的 `/pay?epay_order=...` 支付页面
+- `pid` reuses the OpenAPI API Key configured in the administration console.
+- The signing key reuses the API Key Secret.
+- The `type` field is accepted for compatibility, but the system does not use it to determine the payment method.
+- On success, a redirectable payment page at `/pay?epay_order=...` is returned.
 
 ---
 
 <a id="new-api"></a>
 
-## 🔗 New-Api 接入
+## 🔗 New-Api Integration
 
-HDupay 提供 `/submit.php` 易支付兼容入口，可以接入 New-Api 的易支付支付渠道。接入前请先在 HDupay 后台「API 设置」中添加 API，获取 API Key 和 API Secret。
+HDupay provides an Epay-compatible `/submit.php` entry point that can be integrated with the Epay payment channel in New-Api. Before integrating, add an API under API Settings in the HDupay administration console and obtain its API Key and API Secret.
 
-### 1️⃣ 配置易支付通道
+### 1️⃣ Configure the Epay channel
 
-在 New-Api 后台选择「易支付」配置，填写 HDupay 后台创建的 API 信息：
+Select the Epay configuration in the New-Api administration console and enter the API information created in HDupay:
 
-| New-Api 配置项 | 填写内容 |
+| New-Api Setting | Value |
 |---|---|
-| 易支付网关 / 接口地址 | `https://你的HDupay域名/submit.php` |
-| PID / 商户 ID | HDupay 后台创建的 API Key |
-| Key / 通信密钥 | HDupay 后台创建的 API Secret |
+| Epay gateway / Endpoint URL | `https://your-hdupay-domain/submit.php` |
+| PID / Merchant ID | API Key created in the HDupay administration console |
+| Key / Communication Secret | API Secret created in the HDupay administration console |
 
-![New-Api 易支付配置](docs/images/newapi-1.png)
+![New-Api Epay configuration](docs/images/newapi-1.png)
 
-### 2️⃣ 修改充值方式设置
+### 2️⃣ Update the top-up method settings
 
-把 New-Api 的充值方式设置替换为下面内容，直接复制进去保存即可：
+Replace the New-Api top-up method settings with the following content. Copy it directly and save:
 
 ```json
 [
@@ -511,114 +512,114 @@ HDupay 提供 `/submit.php` 易支付兼容入口，可以接入 New-Api 的易�
 ]
 ```
 
-![New-Api 充值方式设置](docs/images/newapi-2.png)
+![New-Api top-up method settings](docs/images/newapi-2.png)
 
-### 3️⃣ 用户点击充值
+### 3️⃣ User starts a top-up
 
-用户在 New-Api 充值页面点击 `USDC/USDT` 后，会跳转到 HDupay 支付页面完成稳定币付款。
+When users click `USDC/USDT` on the New-Api top-up page, they are redirected to the HDupay payment page to complete their stablecoin payment.
 
-![New-Api 点击充值](docs/images/newapi-3.png)
+![Starting a New-Api top-up](docs/images/newapi-3.png)
 
 ---
 
 <a id="security"></a>
 
-## 🏦 钱包与资产安全建议
+## 🏦 Wallet and Asset Security Recommendations
 
-> 钱包相关功能涉及真实链上资产，请谨慎使用。
+> Wallet functionality involves real on-chain assets. Use it with caution.
 
-建议：
+Recommendations:
 
-- 🔐 根助记词必须离线备份，禁止截图、禁止上传网盘
-- 🧊 生产环境建议使用独立服务器、独立数据库、最小权限账号
-- 🧪 上线前先用小额资产完整测试收款、确认、归集、转出
-- 🧱 建议增加防火墙、后台访问限制、HTTPS、WAF、日志审计
-- 🧾 RPC Key、API Secret、钱包密钥不得写入代码或提交仓库
-- 🔍 真实商用前请进行专业安全审计
+- 🔐 Back up the root mnemonic offline. Never take screenshots or upload it to cloud storage.
+- 🧊 Use a dedicated server, a separate database, and least-privilege accounts in production.
+- 🧪 Before going live, test the complete payment collection, confirmation, and sweeping workflow with small amounts.
+- 🧱 Add a firewall, administration access restrictions, HTTPS, a WAF, and log auditing.
+- 🧾 Never embed RPC Keys, API Secrets, or wallet keys in code or commit them to the repository.
+- 🔍 Obtain a professional security audit before real commercial use.
 
 ---
 
 <a id="project-structure"></a>
 
-## 📁 项目结构
+## 📁 Project Structure
 
 ```text
 HDupay
 ├── app/
-│   ├── controller/        # 控制器
-│   ├── service/           # 业务逻辑
-│   ├── model/             # 数据模型
-│   └── process/           # 常驻进程：监听、归集、转出、汇率同步
+│   ├── controller/        # Controllers
+│   ├── service/           # Business logic
+│   ├── model/             # Data models
+│   └── process/           # Persistent processes: monitoring, sweeping, rate synchronization
 │
-├── config/                # Webman 配置、路由、进程、数据库、链配置
-├── database/              # schema.sql 数据库结构
-├── docs/                  # 文档图片与说明素材
-├── public/                # 前端编译产物与静态资源
-├── scripts/               # 数据迁移脚本
-├── support/               # Webman 支撑文件
-├── web/                   # Vue3 + Vite + Naive UI 前端项目
-├── webman                 # Webman 命令入口
-├── start.php              # 启动入口
-└── README.md              # 项目说明文档
+├── config/                # Webman configuration, routes, processes, database, chain settings
+├── database/              # schema.sql database structure
+├── docs/                  # Documentation images and supporting materials
+├── public/                # Compiled frontend assets and static resources
+├── scripts/               # Data migration scripts
+├── support/               # Webman support files
+├── web/                   # Vue3 + Vite + Naive UI frontend project
+├── webman                 # Webman command entry point
+├── start.php              # startup entry point
+└── README.md              # project documentation
 ```
 
 ---
 
 <a id="faq"></a>
 
-## 🛠️ 常见问题
+## 🛠️ FAQ
 
-### 1. 提示未配置 `WALLET_ENCRYPTION_KEY`
+### 1. `WALLET_ENCRYPTION_KEY` Is Not Configured
 
-请检查项目根目录 `.env` 是否存在，并确认包含：
+Check that `.env` exists in the project root and contains:
 
 ```env
-WALLET_ENCRYPTION_KEY=你的64位随机hex字符串
+WALLET_ENCRYPTION_KEY=replace_with_a_64_character_random_hex_string
 ```
 
-修改后需要重启：
+Restart after making changes:
 
 ```bash
 php webman restart
 ```
 
-### 2. RPC 测试失败
+### 2. RPC Test Fails
 
-请检查：
+Check the following:
 
-- RPC URL 是否正确
-- API Key 是否有效
-- 当前网络是否和 RPC 地址匹配
-- 如果绑定代理，代理是否可用
-- 防火墙是否阻断外部请求
+- Is the RPC URL correct?
+- Is the API Key valid?
+- Does the current network match the RPC endpoint?
+- If a proxy is bound, is it available?
+- Is the firewall blocking outbound requests?
 
-### 3. 前端页面没有更新
+### 3. Frontend Changes Are Not Visible
 
-请重新编译前端：
+Rebuild the frontend:
 
 ```bash
 cd web
 npm run build
 ```
 
-然后重启后端服务或刷新浏览器缓存。
+Then restart the backend service or refresh the browser cache.
 
-### 4. 链上已转账但订单未确认
+### 4. On-chain transfer completed but order is unconfirmed
 
-请检查：
+Check the following:
 
-- RPC 节点是否正常
-- 网络配置是否启用自动监听
-- 合约地址是否正确
-- 确认块数是否过大
-- 扫描步长是否合理
-- 订单地址是否和链上收款地址一致
+- Is the RPC node operating normally?
+- Is automatic monitoring enabled in the network configuration?
+- Is the contract address correct?
+- Is the required confirmation count too high?
+- Is the scanning step size appropriate?
+- Does the order address match the on-chain receiving address?
 
 ---
 
 ## 📜 License
 
-本项目基于开源协议发布，具体请查看项目根目录：
+This project is released under an open-source license. See the project root for details:
 
 ```text
 LICENSE
@@ -626,19 +627,19 @@ LICENSE
 
 ---
 
-## ❤️ 致开发者
+## ❤️ For Developers
 
-如果你正在学习：
+If you are learning about:
 
-- HD 钱包
-- EVM 地址派生
-- ERC20 收款监听
-- Webman 常驻进程
-- Vue3 后台管理系统
-- OpenAPI 支付接口设计
+- HD wallets
+- EVM address derivation
+- ERC20 payment monitoring
+- Persistent Webman processes
+- Vue3 administration systems
+- OpenAPI payment interface design
 
-那么 HDupay 可以作为一个完整的学习参考项目。  
-请记住：**学习环境和生产环境之间，还有安全、合规、风控、审计、运维等大量工作需要完成。**
+HDupay can serve as a complete reference project for learning.
+Remember: **Moving from a learning environment to production still requires substantial work on security, compliance, risk management, auditing, and operations.**
 
 ---
 

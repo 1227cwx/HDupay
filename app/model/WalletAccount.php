@@ -17,14 +17,6 @@ class WalletAccount extends BaseModel
         'collection_type',
         'collection_address',
         'collection_derivation_path',
-        'gas_funder_address',
-        'gas_funder_derivation_path',
-        'encrypted_gas_funder_private_key',
-        'gas_sync_enabled',
-        'gas_native_balance_wei',
-        'gas_sync_status',
-        'gas_sync_error',
-        'gas_last_balance_sync_at',
         'status',
         'created_at',
         'updated_at',
@@ -34,8 +26,6 @@ class WalletAccount extends BaseModel
         'wallet_master_id',
         'network_code',
         'status',
-        'gas_sync_enabled',
-        'gas_sync_status',
     ];
 
     public static function findByNetwork(string $networkCode): ?array
@@ -58,6 +48,15 @@ class WalletAccount extends BaseModel
     public static function findAnyByNetwork(string $networkCode): ?array
     {
         $row = self::query()->where('network_code', $networkCode)->orderByDesc('id')->first();
+        return $row ? $row->toArray() : null;
+    }
+
+    public static function findByIdForUpdate(int $id): ?array
+    {
+        $row = self::query()
+            ->where('id', $id)
+            ->lockForUpdate()
+            ->first();
         return $row ? $row->toArray() : null;
     }
 
@@ -102,42 +101,4 @@ class WalletAccount extends BaseModel
         return self::query()->where('wallet_master_id', $masterId)->delete();
     }
 
-    public static function latestGasBalanceSyncAt(): string
-    {
-        return (string)(self::query()->whereNotNull('gas_last_balance_sync_at')->max('gas_last_balance_sync_at') ?: '');
-    }
-
-    public static function acquireGasWalletLock(string $networkCode): bool
-    {
-        $row = self::query()
-            ->getConnection()
-            ->selectOne('SELECT GET_LOCK(?, 0) AS locked', [self::gasWalletLockName($networkCode)]);
-        return (int)self::dbValue($row, 'locked') === 1;
-    }
-
-    public static function releaseGasWalletLock(string $networkCode): void
-    {
-        try {
-            self::query()
-                ->getConnection()
-                ->selectOne('SELECT RELEASE_LOCK(?) AS released', [self::gasWalletLockName($networkCode)]);
-        } catch (\Throwable) {
-        }
-    }
-
-    private static function gasWalletLockName(string $networkCode): string
-    {
-        return 'hdupay:gas-wallet:' . sha1(strtolower($networkCode));
-    }
-
-    private static function dbValue(mixed $row, string $key): mixed
-    {
-        if (is_array($row)) {
-            return $row[$key] ?? null;
-        }
-        if (is_object($row)) {
-            return $row->{$key} ?? null;
-        }
-        return null;
-    }
 }
