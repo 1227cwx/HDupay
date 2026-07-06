@@ -41,14 +41,9 @@ return [
         'count' => 1,
         'reloadable' => false,
     ],
-    'evm_collection_worker' => [
-        'handler' => app\process\EvmCollectionWorker::class,
-        'count' => 1,
-        'reloadable' => false,
-    ],
-    'evm_withdraw_worker' => [
-        'handler' => app\process\EvmWithdrawWorker::class,
-        'count' => 1,
+    'evm_task_queue_worker' => [
+        'handler' => app\process\EvmTaskQueueWorker::class,
+        'count' => 4,
         'reloadable' => false,
     ],
     'rate_refresh_worker' => [

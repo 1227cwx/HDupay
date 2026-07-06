@@ -99,7 +99,6 @@ import {
   RepeatOutline,
   ServerOutline,
   SettingsOutline,
-  PaperPlaneOutline,
   SpeedometerOutline,
   WalletOutline
 } from '@vicons/ionicons5'
@@ -142,15 +141,6 @@ const menuItems = [
       { label: '归集钱包', key: adminPath('/collection-wallets'), icon: renderIcon(RepeatOutline, '#16a34a') },
       { label: 'Gas 钱包', key: adminPath('/gas-wallets'), icon: renderIcon(ServerOutline, '#f59e0b') },
       { label: '归集记录', key: adminPath('/collections'), icon: renderIcon(RepeatOutline, '#16a34a') }
-    ]
-  },
-  {
-    label: '转出配置',
-    key: 'withdraw-group',
-    icon: renderIcon(PaperPlaneOutline, '#ea580c'),
-    children: [
-      { label: '转出设置', key: adminPath('/withdraw-settings'), icon: renderIcon(SettingsOutline, '#64748b') },
-      { label: '转出记录', key: adminPath('/withdrawals'), icon: renderIcon(PaperPlaneOutline, '#ea580c') }
     ]
   },
   {
@@ -262,8 +252,6 @@ const titles: Record<string, string> = {
   [adminPath('/addresses')]: '地址池',
   [adminPath('/orders')]: '交易订单',
   [adminPath('/collections')]: '归集记录',
-  [adminPath('/withdraw-settings')]: '转出设置',
-  [adminPath('/withdrawals')]: '转出记录',
   [adminPath('/admin-profile')]: '系统设置',
   [adminPath('/fiat-rates')]: '汇率设置',
   [adminPath('/admin-settings')]: '系统设置'

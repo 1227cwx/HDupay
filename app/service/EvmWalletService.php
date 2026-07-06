@@ -2,6 +2,8 @@
 
 namespace app\service;
 
+use app\model\GlobalGasWallet;
+use app\model\GlobalGasWalletBalance;
 use app\model\PaymentAddress;
 use app\model\WalletAccount;
 use app\model\WalletMaster;
@@ -14,6 +16,7 @@ class EvmWalletService
 {
     private const CURVE_N = 'FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141';
     private const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+    private const GLOBAL_GAS_DERIVATION_PATH = "m/44'/60'/0'/2/0";
 
     public function generateMnemonic(): string
     {
@@ -48,6 +51,7 @@ class EvmWalletService
             'encrypted_seed' => $crypto->encrypt($seedHex),
             'status' => 'active',
         ]);
+        GlobalGasWallet::createRecord($this->globalGasWalletPayload($master, $seedHex, $crypto));
 
         foreach (config('chains.networks') as $networkCode => $network) {
             WalletAccount::createRecord($this->networkAccountPayload(
@@ -57,6 +61,7 @@ class EvmWalletService
                 $seedHex,
                 $crypto
             ));
+            $this->createGlobalGasBalanceRow((int)$master['id'], (string)$networkCode);
         }
 
         return [
@@ -81,13 +86,15 @@ class EvmWalletService
         }
 
         $seedHex = (new CryptoService())->decrypt((string)($master['encrypted_seed'] ?? ''));
-        return WalletAccount::createRecord($this->networkAccountPayload(
+        $account = WalletAccount::createRecord($this->networkAccountPayload(
             $master,
             $networkCode,
             $network,
             $seedHex,
             new CryptoService()
         ));
+        $this->createGlobalGasBalanceRow((int)$master['id'], $networkCode);
+        return $account;
     }
 
     private function networkAccountPayload(array $master, string $networkCode, array $network, string $seedHex, CryptoService $crypto): array
@@ -96,11 +103,9 @@ class EvmWalletService
         $accountRootPath = "m/44'/60'/{$accountIndex}'";
         $accountPath = $accountRootPath . '/0';
         $collectionPath = $accountRootPath . '/1/0';
-        $gasFunderPath = $accountRootPath . '/2/0';
         $accountXprv = $this->accountExtendedPrivateKeyFromSeed($seedHex, $accountRootPath);
         $accountNode = $this->parseExtendedPrivateKey($accountXprv);
         $collection = $this->deriveAddressFromAccountNode($accountNode, $accountRootPath, $collectionPath);
-        $gasFunder = $this->deriveAddressFromAccountNode($accountNode, $accountRootPath, $gasFunderPath);
 
         return [
             'wallet_master_id' => $master['id'],
@@ -113,9 +118,6 @@ class EvmWalletService
             'collection_type' => 'local',
             'collection_address' => $collection['address'],
             'collection_derivation_path' => $collectionPath,
-            'gas_funder_address' => $gasFunder['address'],
-            'gas_funder_derivation_path' => $gasFunderPath,
-            'encrypted_gas_funder_private_key' => $crypto->encrypt($gasFunder['private_key']),
             'status' => 'active',
         ];
     }
@@ -123,16 +125,12 @@ class EvmWalletService
     public function ensureAccountSystemAddresses(array $account): array
     {
         $needsCollection = empty($account['collection_address']) || empty($account['collection_derivation_path']);
-        $needsGasFunder = empty($account['gas_funder_address'])
-            || empty($account['gas_funder_derivation_path'])
-            || empty($account['encrypted_gas_funder_private_key']);
-
-        $accountRootPath = $this->accountPrefixFromDepositPath((string)$account['derivation_path']);
-        $accountNode = $this->accountPrivateNode($account);
-        if (!$needsCollection && !$needsGasFunder) {
+        if (!$needsCollection) {
             return !empty($account['id']) ? (WalletAccount::findById((int)$account['id']) ?: $account) : $account;
         }
 
+        $accountRootPath = $this->accountPrefixFromDepositPath((string)$account['derivation_path']);
+        $accountNode = $this->accountPrivateNode($account);
         $data = [];
 
         if ($needsCollection) {
@@ -142,20 +140,39 @@ class EvmWalletService
             $data['collection_derivation_path'] = $collectionPath;
         }
 
-        if ($needsGasFunder) {
-            $gasFunderPath = $accountRootPath . '/2/0';
-            $gasFunder = $this->deriveAddressFromAccountNode($accountNode, $accountRootPath, $gasFunderPath);
-            $data['gas_funder_address'] = $gasFunder['address'];
-            $data['gas_funder_derivation_path'] = $gasFunderPath;
-            $data['encrypted_gas_funder_private_key'] = (new CryptoService())->encrypt($gasFunder['private_key']);
-        }
-
         if ($data) {
             WalletAccount::updateById((int)$account['id'], $data);
             return WalletAccount::findById((int)$account['id']) ?: $account;
         }
 
         return $account;
+    }
+
+    private function globalGasWalletPayload(array $master, string $seedHex, CryptoService $crypto): array
+    {
+        $node = $this->derivePrivateNode($seedHex, self::GLOBAL_GAS_DERIVATION_PATH);
+        $util = new Util();
+        $publicKey = $util->privateKeyToPublicKey((string)$node['private_key']);
+        $address = strtolower($util->publicKeyToAddress($publicKey));
+
+        return [
+            'wallet_master_id' => $master['id'],
+            'address' => $address,
+            'address_lower' => $address,
+            'derivation_path' => self::GLOBAL_GAS_DERIVATION_PATH,
+            'encrypted_private_key' => $crypto->encrypt((string)$node['private_key']),
+        ];
+    }
+
+    private function createGlobalGasBalanceRow(int $masterId, string $networkCode): void
+    {
+        GlobalGasWalletBalance::saveForMasterNetwork($masterId, $networkCode, [
+            'native_symbol' => $this->nativeSymbol($networkCode),
+            'balance_wei' => '0',
+            'sync_enabled' => 1,
+            'sync_status' => 'pending',
+            'sync_error' => '',
+        ]);
     }
 
     public function createNextAddress(string $networkCode, string $tokenCode = 'USDC'): array
@@ -539,6 +556,12 @@ class EvmWalletService
         $ec = new EC('secp256k1');
         $key = $ec->keyFromPrivate($privateKey, 'hex');
         return $key->getPublic(true, 'hex');
+    }
+
+    private function nativeSymbol(string $networkCode): string
+    {
+        $symbol = config('chains.networks.' . $networkCode . '.native_symbol');
+        return $symbol ? (string)$symbol : 'ETH';
     }
 
     private function ser32(int $index): string

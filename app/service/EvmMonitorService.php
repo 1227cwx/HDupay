@@ -354,13 +354,14 @@ class EvmMonitorService
             $activeCollection = null;
         }
         if ($account && $activeCollection && !empty($activeCollection['address_lower'])) {
-            CollectionTask::createPending(
+            $collectionTask = CollectionTask::createPending(
                 $address,
                 (string)$activeCollection['address_lower'],
                 (string)$confirmedOrder['paid_amount_int'],
                 ($activeCollection['address_type'] ?? '') === 'third_party' ? 'exchange' : 'local',
                 (int)$confirmedOrder['required_confirmations']
             );
+            (new TaskQueueService())->enqueueCollection($collectionTask, 'auto');
         }
         (new OpenApiService())->sendCallbackForOrder($confirmedOrder);
     }

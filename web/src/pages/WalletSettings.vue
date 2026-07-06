@@ -83,7 +83,7 @@
       <template #header-extra>
         <n-button type="primary" secondary :disabled="availableNetworks.length === 0" @click="openCreateAccount">
           <template #icon><n-icon><AddCircleOutline /></n-icon></template>
-          添加网络账户
+          初始化缺失网络
         </n-button>
       </template>
       <n-data-table :columns="accountColumns" :data="accounts" :loading="loading" :scroll-x="1200" :pagination="{ pageSize: 10 }" />
@@ -117,7 +117,7 @@
         <n-alert type="error" title="删除风险提示" :bordered="false">
           <n-space vertical size="small">
             <n-text>删除根钱包将会删除所有交易记录与配置。</n-text>
-            <n-text>包含：订单记录、归集记录、转出记录、归集钱包（这里只删除根钱包生成的归集钱包，自己添加的不删）、Gas 钱包、地址池。</n-text>
+            <n-text>包含：订单记录、归集记录、归集钱包（这里只删除根钱包生成的归集钱包，自己添加的不删）、Gas 钱包、地址池。</n-text>
             <n-text>保留：RPC 节点、网络配置、代理池、系统设置。</n-text>
             <n-text strong>请确认后删除。</n-text>
           </n-space>
@@ -134,16 +134,16 @@
       </template>
     </n-modal>
 
-    <n-modal v-model:show="accountCreateShow" preset="dialog" title="添加网络账户">
+    <n-modal v-model:show="accountCreateShow" preset="dialog" title="初始化缺失网络">
       <n-form :model="accountCreateForm" label-placement="top">
-        <n-form-item label="选择网络">
-          <n-select v-model:value="accountCreateForm.network_code" :options="availableNetworks" placeholder="请选择要添加的网络" :render-label="renderNetworkSelectLabel" :render-tag="renderNetworkSelectTag" />
+        <n-form-item label="选择缺失网络">
+          <n-select v-model:value="accountCreateForm.network_code" :options="availableNetworks" placeholder="请选择要初始化的缺失网络" :render-label="renderNetworkSelectLabel" :render-tag="renderNetworkSelectTag" />
         </n-form-item>
       </n-form>
       <template #action>
         <n-space justify="end">
           <n-button @click="accountCreateShow = false">取消</n-button>
-          <n-button type="primary" :loading="accountCreating" :disabled="!accountCreateForm.network_code" @click="createAccount">确认添加</n-button>
+          <n-button type="primary" :loading="accountCreating" :disabled="!accountCreateForm.network_code" @click="createAccount">确认初始化</n-button>
         </n-space>
       </template>
     </n-modal>
@@ -222,7 +222,6 @@ const masterColumns = [
 const accountColumns = [
   { title: '网络', key: 'network_code', width: 140, render: renderNetworkTag },
   { title: '归集地址', key: 'collection_address', width: 130, render: (row: any) => renderShortText(row.collection_address) },
-  { title: 'Gas 钱包', key: 'gas_funder_address', width: 130, render: (row: any) => renderShortText(row.gas_funder_address) },
   { title: '下个地址索引', key: 'next_index', width: 120 },
   { title: '子地址超时', key: 'deposit_timeout_minutes', width: 120, render: (row: any) => `${row.deposit_timeout_minutes || 10} 分钟` },
   {
@@ -361,7 +360,7 @@ async function deleteRootWallet() {
     title: '二次确认删除根钱包',
     content: () => h(NSpace, { vertical: true, size: 'small' }, {
       default: () => [
-        h(NText, null, { default: () => '该操作会删除所有订单记录、归集记录、转出记录、地址池、Gas 钱包，以及根钱包生成的归集钱包。' }),
+        h(NText, null, { default: () => '该操作会删除所有订单记录、归集记录、地址池、Gas 钱包，以及根钱包生成的归集钱包。' }),
         h(NText, { type: 'error', strong: true }, { default: () => '删除后不可恢复，请确认已经离线备份助记词。' })
       ]
     }),
@@ -392,7 +391,7 @@ async function createAccount() {
   accountCreating.value = true
   try {
     await api.post('/admin/wallet/account/create', accountCreateForm)
-    message.success('网络账户已添加')
+    message.success('缺失网络已初始化')
     accountCreateShow.value = false
     await load()
   } catch (e: any) {

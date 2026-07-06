@@ -5,10 +5,13 @@ namespace app\service;
 use app\model\CollectionTask;
 use app\model\DepositOrder;
 use app\model\GasFundingTransaction;
+use app\model\GlobalGasWallet;
 use app\model\PaymentAddress;
 use app\model\RpcConfig;
 use app\model\SystemSetting;
+use app\model\TaskQueue;
 use app\model\WalletAccount;
+use app\model\WalletMaster;
 use RuntimeException;
 use support\Log;
 use Throwable;
@@ -21,9 +24,17 @@ class CollectionService
     public function list(array $filters, int $page, int $perPage): array
     {
         $result = CollectionTask::listPage($filters, $page, $perPage);
+        $queues = TaskQueue::latestByBusinessIds('collection', array_column($result['items'], 'id'));
         foreach ($result['items'] as &$item) {
             $item['native_symbol'] = $this->nativeSymbol((string)$item['network_code']);
+            $queue = $queues[(int)$item['id']] ?? null;
+            $item['queue_id'] = $queue ? (int)$queue['id'] : null;
+            $item['queue_process_status'] = $queue ? (string)$queue['process_status'] : '';
+            $item['queue_is_invalid'] = $queue ? (int)$queue['is_invalid'] : null;
+            $item['queue_source'] = $queue ? (string)$queue['source'] : '';
+            $item['queue_last_error'] = $queue ? (string)($queue['last_error'] ?? '') : '';
         }
+        unset($item);
         return $result;
     }
 
@@ -60,7 +71,8 @@ class CollectionService
         if (!in_array((string)($task['status'] ?? ''), CollectionTask::RETRY_STATUSES, true)) {
             throw new RuntimeException('只有归集失败或需要手动处理的记录才允许重试');
         }
-        return CollectionTask::mark($id, 'pending_collect', ['error_message' => '']);
+        (new TaskQueueService())->enqueueCollection($task, 'manual');
+        return true;
     }
 
     public function manualCreate(int $addressId, string $amountInt = ''): array
@@ -77,13 +89,18 @@ class CollectionService
         if (!$activeCollection || empty($activeCollection['address_lower'])) {
             throw new RuntimeException('归集地址未配置');
         }
-        return CollectionTask::createPending(
+        $task = CollectionTask::createPending(
             $address,
             (string)$activeCollection['address_lower'],
             $amountInt ?: '0',
             ($activeCollection['address_type'] ?? '') === 'third_party' ? 'exchange' : 'local',
             $this->requiredConfirmationsForAddress((int)$address['id'])
         );
+        if (!TaskQueue::activeByBusiness('collection', (int)$task['id'])) {
+            CollectionTask::markQueueActive((int)$task['id'], false);
+        }
+        (new TaskQueueService())->enqueueCollection($task, 'manual');
+        return $task;
     }
 
     private function requiredConfirmationsForAddress(int $addressId): int
@@ -98,43 +115,33 @@ class CollectionService
 
     public function processPending(int $limit = 10): array
     {
-        $this->recoverStaleProcessingTasks();
-        return $this->processTasks(CollectionTask::findAutoProcessable($limit, $this->autoCollectMaxRetryCount()));
+        return (new TaskQueueService())->enqueueCollectionPending($limit, 'auto');
     }
 
     public function processAll(): array
     {
-        $this->recoverStaleProcessingTasks();
-        $results = [];
-        foreach (CollectionTask::pendingIds() as $id) {
-            $task = CollectionTask::findPendingById((int)$id);
-            if (!$task) {
-                continue;
-            }
-            $results[] = $this->processWithFailureHandling($task, false, true);
-        }
-        return $results;
+        return (new TaskQueueService())->enqueueCollectionPending(0, 'manual');
     }
 
     public function processSingle(int $id): array
     {
         $task = CollectionTask::findById($id);
         if (!$task) {
-            throw new RuntimeException('归集记录不存在');
+            throw new RuntimeException('Collection task does not exist');
         }
         if (!in_array((string)($task['status'] ?? ''), CollectionTask::RETRY_STATUSES, true)) {
-            throw new RuntimeException('只有归集失败的记录才允许手动重新归集');
+            throw new RuntimeException('Only failed or manual-required collection tasks can be queued manually');
         }
-        return $this->processWithFailureHandling($task, true, true);
+        return (new TaskQueueService())->enqueueCollection($task, 'manual');
     }
 
-    private function processTasks(array $tasks): array
+    public function executeQueuedTask(int $id, bool $manual = false): array
     {
-        $results = [];
-        foreach ($tasks as $task) {
-            $results[] = $this->processWithFailureHandling($task);
+        $task = CollectionTask::findById($id);
+        if (!$task) {
+            throw new RuntimeException('Collection task does not exist');
         }
-        return $results;
+        return $this->processWithFailureHandling($task, false, $manual);
     }
 
     private function processWithFailureHandling(array $task, bool $throwOnFailure = false, bool $manual = false): array
@@ -262,7 +269,7 @@ class CollectionService
         $neededWei = gmp_strval(gmp_mul(gmp_init($gasLimit, 10), gmp_init($gasPrice, 10)), 10);
         $nativeBalance = $rpc->getBalance($networkCode, $from);
         if (gmp_cmp(gmp_init($nativeBalance, 10), gmp_init($neededWei, 10)) < 0) {
-            $fundingTxHash = $this->fundGasIfPossible($task, $account, $neededWei, $nativeBalance);
+            $fundingTxHash = $this->fundGasIfPossible($task, $neededWei, $nativeBalance);
             CollectionTask::mark((int)$task['id'], 'gas_funding', [
                 'error_message' => '收款子地址 ' . $this->nativeSymbol($networkCode) . ' 余额不足，已从 Gas 钱包补充手续费，等待 Gas 补充交易确认：' . $fundingTxHash,
             ]);
@@ -296,7 +303,7 @@ class CollectionService
     private function checkGasFunding(array $task, EvmRpcService $rpc): array
     {
         if (empty($task['gas_funding_tx_hash'])) {
-            CollectionTask::mark((int)$task['id'], 'pending_collect');
+            CollectionTask::mark((int)$task['id'], 'pending_collect', ['gas_funding_tx_hash' => '']);
             return ['task_id' => $task['id'], 'ok' => true, 'status' => 'pending_collect'];
         }
         $txHash = (string)$task['gas_funding_tx_hash'];
@@ -309,7 +316,10 @@ class CollectionService
         if ($status !== '0x1') {
             $message = 'Gas 补充交易失败，交易哈希：' . $txHash;
             GasFundingTransaction::markFailedByTxHash($txHash, $message);
-            CollectionTask::mark((int)$task['id'], 'manual_required', ['error_message' => $message]);
+            CollectionTask::mark((int)$task['id'], 'manual_required', [
+                'gas_funding_tx_hash' => '',
+                'error_message' => $message,
+            ]);
             return ['task_id' => $task['id'], 'ok' => false, 'status' => 'manual_required'];
         }
 
@@ -324,7 +334,10 @@ class CollectionService
         }
 
         GasFundingTransaction::markSuccessByTxHash($txHash, $blockNumber, $currentConfirmations, $requiredConfirmations);
-        CollectionTask::mark((int)$task['id'], 'pending_collect', ['error_message' => '']);
+        CollectionTask::mark((int)$task['id'], 'pending_collect', [
+            'gas_funding_tx_hash' => '',
+            'error_message' => '',
+        ]);
         return ['task_id' => $task['id'], 'ok' => true, 'status' => 'pending_collect'];
     }
 
@@ -371,6 +384,7 @@ class CollectionService
 
         if (strtolower((string)($receipt['status'] ?? '0x0')) !== '0x1') {
             CollectionTask::mark((int)$task['id'], 'collect_failed', [
+                'collect_tx_hash' => '',
                 'error_message' => '链上归集交易执行失败，交易哈希：' . $task['collect_tx_hash'] . '，回执状态：' . (string)($receipt['status'] ?? '未知'),
             ]);
             return ['task_id' => $task['id'], 'ok' => false, 'status' => 'collect_failed'];
@@ -391,51 +405,41 @@ class CollectionService
         return '100000';
     }
 
-    private function fundGasIfPossible(array $task, array $account, string $neededWei, string $nativeBalance): string
+    private function fundGasIfPossible(array $task, string $neededWei, string $nativeBalance): string
     {
-        $networkCode = $task['network_code'];
+        $networkCode = (string)$task['network_code'];
         $symbol = $this->nativeSymbol($networkCode);
-        if (empty($account['encrypted_gas_funder_private_key']) || empty($account['gas_funder_address'])) {
+        $gasWallet = $this->globalGasWallet();
+        $gasWalletAddress = strtolower((string)$gasWallet['address_lower']);
+        if ($gasWalletAddress === '' || empty($gasWallet['encrypted_private_key'])) {
             throw new RuntimeException(
-                '收款子地址 ' . $symbol . ' 余额不足，当前余额 '
-                . $this->formatWeiToEth($nativeBalance)
-                . ' ' . $symbol . '，需要至少 '
-                . $this->formatWeiToEth($neededWei)
-                . ' ' . $symbol . '；同时 Gas 钱包或 Gas 私钥未配置，无法自动补充手续费'
+                'Deposit address ' . $symbol . ' balance is insufficient; global Gas wallet is not configured'
             );
         }
-        if (!WalletAccount::acquireGasWalletLock((string)$networkCode)) {
-            throw new RuntimeException('同网络 Gas 钱包正在处理交易，请稍后再试');
+        if (!GlobalGasWallet::acquireGasWalletLock($networkCode)) {
+            throw new RuntimeException('Gas wallet is processing another transaction on this network, please retry later');
         }
 
         try {
             $rpc = new EvmRpcService();
-            $privateKey = (new CryptoService())->decrypt($account['encrypted_gas_funder_private_key']);
+            $privateKey = (new CryptoService())->decrypt((string)$gasWallet['encrypted_private_key']);
             $gasPrice = $rpc->gasPrice($networkCode);
             $gas = '21000';
             $transferCost = gmp_strval(gmp_mul(gmp_init($gasPrice, 10), gmp_init($gas, 10)), 10);
             $shortage = gmp_sub(gmp_init($neededWei, 10), gmp_init($nativeBalance, 10));
-            $value = gmp_strval(gmp_add($shortage, gmp_init($transferCost, 10)), 10);
+            $value = gmp_strval($shortage, 10);
             $totalGasFunderCost = gmp_strval(gmp_add(gmp_init($value, 10), gmp_init($transferCost, 10)), 10);
-            $gasFunderBalance = $rpc->getBalance($networkCode, $account['gas_funder_address']);
+            $gasFunderBalance = $rpc->getBalance($networkCode, $gasWalletAddress);
             if (gmp_cmp(gmp_init($gasFunderBalance, 10), gmp_init($totalGasFunderCost, 10)) < 0) {
                 throw new RuntimeException(
-                    'Gas 钱包余额不足，当前余额 '
+                    'Gas wallet balance is insufficient, current '
                     . $this->formatWeiToEth($gasFunderBalance)
-                    . ' ' . $symbol . '；收款子地址当前余额 '
-                    . $this->formatWeiToEth($nativeBalance)
-                    . ' ' . $symbol . '，归集需要至少 '
-                    . $this->formatWeiToEth($neededWei)
-                    . ' ' . $symbol . '，本次需要向子地址补充约 '
-                    . $this->formatWeiToEth($value)
-                    . ' ' . $symbol . '，并支付 Gas 钱包转账手续费约 '
-                    . $this->formatWeiToEth($transferCost)
-                    . ' ' . $symbol . '，合计需要约 '
+                    . ' ' . $symbol . ', needs about '
                     . $this->formatWeiToEth($totalGasFunderCost)
                     . ' ' . $symbol
                 );
             }
-            $nonce = $rpc->getTransactionCount($networkCode, $account['gas_funder_address']);
+            $nonce = $rpc->getTransactionCount($networkCode, $gasWalletAddress);
             $cfg = $rpc->runtimeConfig($networkCode);
             $requiredConfirmations = (int)($task['required_confirmations'] ?? 0);
             if ($requiredConfirmations <= 0) {
@@ -443,7 +447,7 @@ class CollectionService
             }
             $raw = (new TransactionSignerService())->signLegacy([
                 'nonce' => (new EvmHexService())->decimalToQuantity($nonce),
-                'from' => $account['gas_funder_address'],
+                'from' => $gasWalletAddress,
                 'to' => $task['from_address'],
                 'gas' => (new EvmHexService())->decimalToQuantity($gas),
                 'gasPrice' => (new EvmHexService())->decimalToQuantity($gasPrice),
@@ -456,7 +460,7 @@ class CollectionService
                 'network_code' => $networkCode,
                 'business_type' => 'collection',
                 'business_id' => (int)$task['id'],
-                'from_address' => strtolower($account['gas_funder_address']),
+                'from_address' => $gasWalletAddress,
                 'to_address' => strtolower($task['from_address']),
                 'amount_wei' => $value,
                 'tx_hash' => strtolower($txHash),
@@ -468,8 +472,21 @@ class CollectionService
             CollectionTask::mark((int)$task['id'], 'gas_funding', ['gas_funding_tx_hash' => strtolower($txHash)]);
             return strtolower($txHash);
         } finally {
-            WalletAccount::releaseGasWalletLock((string)$networkCode);
+            GlobalGasWallet::releaseGasWalletLock($networkCode);
         }
+    }
+
+    private function globalGasWallet(): array
+    {
+        $master = WalletMaster::latestActive();
+        if (!$master) {
+            throw new RuntimeException('Root wallet is not initialized');
+        }
+        $wallet = GlobalGasWallet::findByMasterId((int)$master['id']);
+        if (!$wallet) {
+            throw new RuntimeException('Global Gas wallet does not exist');
+        }
+        return $wallet;
     }
 
     private function recoverStaleProcessingTasks(): void

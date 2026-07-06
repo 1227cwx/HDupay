@@ -2,9 +2,12 @@
 
 namespace app\service;
 
+use app\model\GlobalGasWallet;
+use app\model\GlobalGasWalletBalance;
 use app\model\SystemSetting;
 use app\model\WalletAccount;
 use app\model\WalletCollectionAddress;
+use app\model\WalletMaster;
 use InvalidArgumentException;
 use RuntimeException;
 use Throwable;
@@ -170,13 +173,17 @@ class WalletAssetService
 
     public function gasWallets(): array
     {
+        $master = WalletMaster::latestActive();
+        $wallet = $master ? GlobalGasWallet::findByMasterId((int)$master['id']) : null;
+
         return [
             'settings' => [
                 'balance_sync_enabled' => $this->gasBalanceSyncEnabled() ? 1 : 0,
                 'balance_sync_interval_minutes' => $this->gasBalanceSyncIntervalMinutes(),
                 'balance_last_sync_at' => $this->gasBalanceLastSyncAt(),
             ],
-            'accounts' => $this->accountsWithNetworkMeta(true),
+            'wallet' => $wallet ? $this->sanitizeGlobalGasWallet($wallet) : null,
+            'balances' => $master ? $this->gasBalancesWithNetworkMeta((int)$master['id']) : [],
         ];
     }
 
@@ -191,37 +198,44 @@ class WalletAssetService
         return $this->gasWallets();
     }
 
-    public function setGasSyncEnabled(int $walletAccountId, bool $enabled): array
+    public function setGasSyncEnabled(string $networkCode, bool $enabled): array
     {
-        $this->activeAccount($walletAccountId);
-        WalletAccount::updateById($walletAccountId, ['gas_sync_enabled' => $enabled ? 1 : 0]);
+        $networkCode = trim($networkCode);
+        $master = $this->activeMaster();
+        $this->activeAccountByNetwork($networkCode);
+        if (!GlobalGasWalletBalance::updateByMasterNetwork((int)$master['id'], $networkCode, ['sync_enabled' => $enabled ? 1 : 0])) {
+            throw new RuntimeException('Gas wallet network balance record does not exist');
+        }
         return $this->gasWallets();
     }
 
-    public function syncGasWallet(int $walletAccountId): array
+    public function syncGasWallet(string $networkCode): array
     {
-        $account = WalletAccount::findById($walletAccountId);
-        if (!$account) {
-            throw new RuntimeException('网络账户不存在');
+        $networkCode = trim($networkCode);
+        $master = $this->activeMaster();
+        $this->activeAccountByNetwork($networkCode);
+        $row = GlobalGasWalletBalance::findByMasterNetwork((int)$master['id'], $networkCode);
+        if (!$row) {
+            throw new RuntimeException('Gas wallet network balance record does not exist');
         }
-        $this->syncOneGasWallet($account, true);
+        $this->syncOneGasWallet($row, true);
         return $this->gasWallets();
     }
 
     public function syncAllGasBalances(): array
     {
+        $master = WalletMaster::latestActive();
+        if (!$master) {
+            return ['synced' => 0, 'last_sync_at' => date('Y-m-d H:i:s')];
+        }
         $count = 0;
-        foreach (WalletAccount::listPage([], 1, 100, 'id', 'asc')['items'] as $account) {
-            if ((int)($account['gas_sync_enabled'] ?? 1) !== 1) {
-                continue;
-            }
+        foreach (GlobalGasWalletBalance::enabledListByMasterId((int)$master['id']) as $row) {
             try {
-                $this->syncOneGasWallet($account, false);
+                $this->syncOneGasWallet($row, false);
                 $count++;
             } catch (Throwable $e) {
-                Log::error('Gas 钱包余额同步失败', [
-                    'wallet_account_id' => $account['id'] ?? 0,
-                    'network' => $account['network_code'] ?? '',
+                Log::error('Gas wallet balance sync failed', [
+                    'network' => $row['network_code'] ?? '',
                     'error' => $e->getMessage(),
                 ]);
             }
@@ -312,6 +326,30 @@ class WalletAssetService
         return $account;
     }
 
+    private function activeMaster(): array
+    {
+        $master = WalletMaster::latestActive();
+        if (!$master) {
+            throw new RuntimeException('Root wallet is not initialized');
+        }
+        return $master;
+    }
+
+    private function activeAccountByNetwork(string $networkCode): array
+    {
+        if ($networkCode === '') {
+            throw new InvalidArgumentException('Network cannot be empty');
+        }
+        $account = WalletAccount::findAnyByNetwork($networkCode);
+        if (!$account) {
+            throw new RuntimeException('Network account does not exist');
+        }
+        if (($account['status'] ?? '') !== 'active') {
+            throw new RuntimeException('Network account is disabled');
+        }
+        return $account;
+    }
+
     private function syncWalletAccountCollectionTarget(array $account, array $address): void
     {
         $type = ($address['address_type'] ?? '') === 'third_party' ? 'exchange' : 'local';
@@ -349,24 +387,25 @@ class WalletAssetService
         }
     }
 
-    private function syncOneGasWallet(array $account, bool $throw): void
+    private function syncOneGasWallet(array $row, bool $throw): void
     {
         try {
-            if (empty($account['gas_funder_address'])) {
-                throw new RuntimeException('Gas 钱包地址未配置');
+            $wallet = GlobalGasWallet::findByMasterId((int)$row['wallet_master_id']);
+            if (!$wallet || empty($wallet['address_lower'])) {
+                throw new RuntimeException('Global Gas wallet address is not configured');
             }
-            $balance = (new EvmRpcService())->getBalance((string)$account['network_code'], (string)$account['gas_funder_address']);
-            WalletAccount::updateById((int)$account['id'], [
-                'gas_native_balance_wei' => $balance,
-                'gas_sync_status' => 'success',
-                'gas_sync_error' => '',
-                'gas_last_balance_sync_at' => date('Y-m-d H:i:s'),
+            $balance = (new EvmRpcService())->getBalance((string)$row['network_code'], (string)$wallet['address_lower']);
+            GlobalGasWalletBalance::updateById((int)$row['id'], [
+                'balance_wei' => $balance,
+                'sync_status' => 'success',
+                'sync_error' => '',
+                'last_balance_sync_at' => date('Y-m-d H:i:s'),
             ]);
         } catch (Throwable $e) {
-            WalletAccount::updateById((int)$account['id'], [
-                'gas_sync_status' => 'failed',
-                'gas_sync_error' => $e->getMessage(),
-                'gas_last_balance_sync_at' => date('Y-m-d H:i:s'),
+            GlobalGasWalletBalance::updateById((int)$row['id'], [
+                'sync_status' => 'failed',
+                'sync_error' => $e->getMessage(),
+                'last_balance_sync_at' => date('Y-m-d H:i:s'),
             ]);
             if ($throw) {
                 throw $e;
@@ -374,7 +413,7 @@ class WalletAssetService
         }
     }
 
-    private function accountsWithNetworkMeta(bool $includeGasMeta = false): array
+    private function accountsWithNetworkMeta(): array
     {
         $accounts = WalletAccount::listPage([], 1, 100, 'id', 'asc')['items'];
         foreach ($accounts as &$account) {
@@ -383,13 +422,29 @@ class WalletAssetService
             $account['chain_id'] = (int)(config('chains.networks.' . $networkCode . '.chain_id') ?: 0);
             $account['native_symbol'] = $this->nativeSymbol($networkCode);
             $account['encrypted_account_xprv'] = '';
-            $account['encrypted_gas_funder_private_key'] = '';
-            if ($includeGasMeta) {
-                $account['gas_native_balance'] = $this->formatTokenAmount((string)($account['gas_native_balance_wei'] ?? '0'), 18);
-            }
         }
         unset($account);
         return $accounts;
+    }
+
+    private function gasBalancesWithNetworkMeta(int $masterId): array
+    {
+        $rows = GlobalGasWalletBalance::listByMasterId($masterId);
+        foreach ($rows as &$row) {
+            $networkCode = (string)$row['network_code'];
+            $row['network_name'] = config('chains.networks.' . $networkCode . '.name') ?: $networkCode;
+            $row['chain_id'] = (int)(config('chains.networks.' . $networkCode . '.chain_id') ?: 0);
+            $row['native_symbol'] = $row['native_symbol'] ?: $this->nativeSymbol($networkCode);
+            $row['balance'] = $this->formatTokenAmount((string)($row['balance_wei'] ?? '0'), 18);
+        }
+        unset($row);
+        return $rows;
+    }
+
+    private function sanitizeGlobalGasWallet(array $wallet): array
+    {
+        $wallet['encrypted_private_key'] = '';
+        return $wallet;
     }
 
     private function sanitizeCollectionAddress(array $row): array
@@ -430,7 +485,7 @@ class WalletAssetService
     private function gasBalanceLastSyncAt(): string
     {
         $lastSyncAt = trim(SystemSetting::getValue(self::GAS_LAST_SYNC_KEY, ''));
-        return $lastSyncAt !== '' ? $lastSyncAt : WalletAccount::latestGasBalanceSyncAt();
+        return $lastSyncAt !== '' ? $lastSyncAt : GlobalGasWalletBalance::latestBalanceSyncAt();
     }
 
     private function balanceSyncDue(string $lastSyncAt, int $intervalMinutes): bool

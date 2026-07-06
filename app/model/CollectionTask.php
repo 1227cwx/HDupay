@@ -25,6 +25,7 @@ class CollectionTask extends BaseModel
         'required_confirmations',
         'error_message',
         'retry_count',
+        'queue_active',
         'last_retry_at',
         'created_at',
         'updated_at',
@@ -47,7 +48,7 @@ class CollectionTask extends BaseModel
         return self::query()
             ->whereIn('status', self::PROCESSABLE_STATUSES)
             ->orderBy('id')
-            ->limit($limit)
+            ->when($limit > 0, fn($query) => $query->limit($limit))
             ->get()
             ->toArray();
     }
@@ -65,7 +66,16 @@ class CollectionTask extends BaseModel
                     });
             })
             ->orderBy('id')
-            ->limit($limit)
+            ->when($limit > 0, fn($query) => $query->limit($limit))
+            ->get()
+            ->toArray();
+    }
+
+    public static function findManualQueueable(): array
+    {
+        return self::query()
+            ->whereIn('status', self::PROCESSABLE_STATUSES)
+            ->orderBy('id')
             ->get()
             ->toArray();
     }
@@ -137,6 +147,7 @@ class CollectionTask extends BaseModel
             'required_confirmations' => $requiredConfirmations,
             'current_confirmations' => 0,
             'status' => 'pending_collect',
+            'queue_active' => 0,
         ]);
     }
 
@@ -157,6 +168,33 @@ class CollectionTask extends BaseModel
             'retry_count' => (int)($row['retry_count'] ?? 0) + 1,
             'last_retry_at' => self::now(),
         ]);
+    }
+
+    public static function markQueueActive(int $id, bool $active): bool
+    {
+        return self::updateById($id, ['queue_active' => $active ? 1 : 0]);
+    }
+
+    public static function resetForManualQueue(int $id): bool
+    {
+        $row = self::findById($id);
+        if (!$row) {
+            return false;
+        }
+
+        $data = [
+            'retry_count' => 0,
+            'last_retry_at' => null,
+            'error_message' => '',
+            'queue_active' => 0,
+        ];
+        if (in_array((string)($row['status'] ?? ''), self::RETRY_STATUSES, true)) {
+            $data['status'] = 'pending_collect';
+            $data['gas_funding_tx_hash'] = '';
+            $data['collect_tx_hash'] = '';
+            $data['current_confirmations'] = 0;
+        }
+        return self::updateById($id, $data);
     }
 
     public static function shouldCountRetry(string $status): bool

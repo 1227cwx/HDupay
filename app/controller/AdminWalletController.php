@@ -201,7 +201,7 @@ class AdminWalletController extends BaseController
     public function toggleGasWalletSync(Request $request)
     {
         try {
-            return $this->ok((new WalletAssetService())->setGasSyncEnabled((int)$request->input('wallet_account_id', 0), (bool)$request->input('sync_enabled', false)));
+            return $this->ok((new WalletAssetService())->setGasSyncEnabled((string)$request->input('network_code', ''), (bool)$request->input('sync_enabled', false)));
         } catch (Throwable $e) {
             return $this->fail($e);
         }
@@ -210,7 +210,7 @@ class AdminWalletController extends BaseController
     public function syncGasWallet(Request $request)
     {
         try {
-            return $this->ok((new WalletAssetService())->syncGasWallet((int)$request->input('wallet_account_id', 0)));
+            return $this->ok((new WalletAssetService())->syncGasWallet((string)$request->input('network_code', '')));
         } catch (Throwable $e) {
             return $this->fail($e);
         }
